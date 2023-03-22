@@ -38,7 +38,32 @@ impl<'a> Interpreter<'a> {
                 self.eval_print_statement(node);
                 return Ok(None);
             },
+            Node::AssignmentExpression(node) => {
+                return self.eval_assignment_expression(node).map(|value| Some(value));
+            },
+            Node::WhileStatement(node) => {
+                self.eval_while_statement(node);
+                return Ok(None);
+            },
             _ => todo!(),
+        }
+    }
+
+    fn eval_assignment_expression(&mut self, node: &AssignmentExpressionNode) -> Result<JsValue, String> {
+        let new_variable_value = self.eval_node(&node.right).unwrap().unwrap_or(JsValue::Undefined);
+
+        match node.left.as_ref() {
+            Node::Identifier(node) => {
+                self.current_enironment.assign_variable(node.id.clone(), new_variable_value.clone()).unwrap();
+                return Ok(new_variable_value);
+            },
+            _ => todo!()
+        }
+    }
+
+    fn eval_while_statement(&mut self, node: &WhileStatementNode) {
+        while self.eval_node(&node.condition).unwrap().unwrap().to_bool() {
+            self.eval_node(&node.body);
         }
     }
 
@@ -49,7 +74,6 @@ impl<'a> Interpreter<'a> {
             Some(value) => println!("{}", value),
             None => println!("{}", JsValue::Undefined),
         }
-
     }
 
     fn eval_if_statement(&mut self, node: &IfStatementNode) -> Result<(), String> {
@@ -78,10 +102,19 @@ impl<'a> Interpreter<'a> {
     }
 
     fn eval_variable_declaration(&mut self, node: &VariableDeclarationNode) -> Result<(), String> {
-        let value = self
-            .eval_node(&node.value)
-            .expect("Error during variable value evaluation")
-            .expect("No value");
+        let value = if let Some(value) = &node.value {
+            self
+                .eval_node(value.as_ref())
+                .expect("Error during variable value evaluation")
+                .expect("No value")
+        } else {
+            JsValue::Undefined
+        };
+
+//        let value = self
+//            .eval_node(&node.value)
+//            .expect("Error during variable value evaluation")
+//            .expect("No value");
         let a = node.id.clone();
         match self.current_enironment.define_variable(a, value) {
             Ok(_) => Ok(()),
@@ -126,7 +159,6 @@ impl<'a> Interpreter<'a> {
     }
 
     fn div(&self, left: &JsValue, right: &JsValue) -> Result<JsValue, String> {
-        println!("mul: left ({:?}) right ({:?})", left, right);
         match (left, right) {
             (JsValue::Number(left_number), JsValue::Number(right_number)) => {
                 Ok(JsValue::Number(left_number / right_number))
@@ -140,7 +172,6 @@ impl<'a> Interpreter<'a> {
     }
 
     fn mul(&self, left: &JsValue, right: &JsValue) -> Result<JsValue, String> {
-        println!("mul: left ({:?}) right ({:?})", left, right);
         match (left, right) {
             (JsValue::String(string), JsValue::Number(number)) => {
                 Ok(JsValue::String(string.repeat(*number as usize)))
@@ -196,46 +227,46 @@ impl Default for Interpreter<'static> {
     }
 }
 
-fn identifier_evaluation() {
-    let ast = Node::BlockStatement(BlockStatementNode {
-        statements: vec![
-            Node::VariableDeclaration(VariableDeclarationNode {
-                kind: VariableDeclarationKind::Let,
-                id: "a".to_string(),
-                value: Box::new(Node::NumberLiteral(3.0)),
-            }),
-            Node::VariableDeclaration(VariableDeclarationNode {
-                kind: VariableDeclarationKind::Let,
-                id: "b".to_string(),
-                value: Box::new(Node::NumberLiteral(3.0)),
-            }),
-            Node::VariableDeclaration(VariableDeclarationNode {
-                kind: VariableDeclarationKind::Let,
-                id: "c".to_string(),
-                value: Box::new(Node::BinaryExpression(BinaryExpressionNode {
-                    left: Box::new(Node::Identifier(IdentifierNode {
-                        id: "a".to_string(),
-                    })),
-                    operator: BinaryOperator::Add,
-                    right: Box::new(Node::Identifier(IdentifierNode {
-                        id: "b".to_string(),
-                    })),
-                })),
-            }),
-            Node::Identifier(IdentifierNode {
-                id: "c".to_string(),
-            }),
-        ],
-    });
-
-    let mut interpreter = Interpreter::default();
-
-    let result = interpreter
-        .eval_node(&ast)
-        .expect("Error during evaluating node");
-
-    match result {
-        None => println!("No Value"),
-        Some(value) => println!("> {:?}", value),
-    }
-}
+//fn identifier_evaluation() {
+//    let ast = Node::BlockStatement(BlockStatementNode {
+//        statements: vec![
+//            Node::VariableDeclaration(VariableDeclarationNode {
+//                kind: VariableDeclarationKind::Let,
+//                id: "a".to_string(),
+//                value: Box::new(Node::NumberLiteral(3.0)),
+//            }),
+//            Node::VariableDeclaration(VariableDeclarationNode {
+//                kind: VariableDeclarationKind::Let,
+//                id: "b".to_string(),
+//                value: Box::new(Node::NumberLiteral(3.0)),
+//            }),
+//            Node::VariableDeclaration(VariableDeclarationNode {
+//                kind: VariableDeclarationKind::Let,
+//                id: "c".to_string(),
+//                value: Box::new(Node::BinaryExpression(BinaryExpressionNode {
+//                    left: Box::new(Node::Identifier(IdentifierNode {
+//                        id: "a".to_string(),
+//                    })),
+//                    operator: BinaryOperator::Add,
+//                    right: Box::new(Node::Identifier(IdentifierNode {
+//                        id: "b".to_string(),
+//                    })),
+//                })),
+//            }),
+//            Node::Identifier(IdentifierNode {
+//                id: "c".to_string(),
+//            }),
+//        ],
+//    });
+//
+//    let mut interpreter = Interpreter::default();
+//
+//    let result = interpreter
+//        .eval_node(&ast)
+//        .expect("Error during evaluating node");
+//
+//    match result {
+//        None => println!("No Value"),
+//        Some(value) => println!("> {:?}", value),
+//    }
+//}

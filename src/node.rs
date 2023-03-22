@@ -10,9 +10,48 @@ pub enum Node {
     Identifier(IdentifierNode),
     BinaryExpression(BinaryExpressionNode),
     VariableDeclaration(VariableDeclarationNode),
+    AssignmentExpression(AssignmentExpressionNode),
     BlockStatement(BlockStatementNode),
     IfStatement(IfStatementNode),
     PrintStatement(PrintStatementNode),
+    WhileStatement(WhileStatementNode),
+}
+
+#[derive(Debug)]
+pub enum AssignmentOperator {
+    AddEqual,
+    SubEqual,
+    DivEqual,
+    MulEqual,
+    Equal,
+}
+
+#[derive(Debug)]
+pub struct AssignmentExpressionNode {
+    pub left: Box<Node>,
+    pub operator: AssignmentOperator,
+    pub right: Box<Node>,
+}
+
+impl TryFrom<&TokenKind> for AssignmentOperator {
+    type Error = String;
+
+    fn try_from(value: &TokenKind) -> Result<Self, Self::Error> {
+        match value {
+            TokenKind::PlusEqual => Ok(Self::AddEqual),
+            TokenKind::Minus => Ok(Self::SubEqual),
+            TokenKind::Mul => Ok(Self::MulEqual),
+            TokenKind::Div => Ok(Self::DivEqual),
+            TokenKind::Equal => Ok(Self::Equal),
+            _ => Err("Cannot convert token kind to assignment operator".to_string()),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct WhileStatementNode {
+    pub condition: Box<Node>,
+    pub body: Box<Node>,
 }
 
 #[derive(Debug)]
@@ -81,5 +120,5 @@ pub enum VariableDeclarationKind {
 pub struct VariableDeclarationNode {
     pub kind: VariableDeclarationKind,
     pub id: String,
-    pub value: Box<Node>,
+    pub value: Option<Box<Node>>,
 }

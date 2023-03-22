@@ -38,10 +38,10 @@ impl JsValue {
 impl Display for JsValue {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            JsValue::Undefined => write!(f, "undefined"),
+            JsValue::Undefined => write!(f, "\x1b[37mundefined\x1b[0m"),
             JsValue::Null => write!(f, "null"),
-            JsValue::String(str) => write!(f, "\"{}\"", str),
-            JsValue::Number(number) => write!(f, "{}", number),
+            JsValue::String(str) => write!(f, "\x1b[93m\"{}\"\x1b[0m", str),
+            JsValue::Number(number) => write!(f, "\x1b[36m{}\x1b[0m", number),
             JsValue::Boolean(value) => write!(f, "{}", if *value { "true" } else { "false" }),
         }
     }

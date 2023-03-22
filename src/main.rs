@@ -3,6 +3,7 @@ mod node;
 mod parser;
 mod scanner;
 use interpreter::{Interpreter, JsValue};
+use std::env;
 
 fn eval(code: &str, is_print_ast: bool) {
     let mut parser = parser::Parser::default();
@@ -26,10 +27,23 @@ fn eval(code: &str, is_print_ast: bool) {
 }
 
 fn main() {
-    let code = "if (0) { print 1; print 2; } else { print \"0 is false\"; }";
+    for argument in env::args() {
+        println!("{argument}");
+    }
 
-    eval(code, true);
-//      repl();
+    let code = "
+    let a = 10;
+    while (a) {
+        a = a - 1;
+        print a;
+    }
+    ";
+
+//    eval(code, false);
+    repl();
+
+
+//    println!("\x1b[93mError\x1b[0m");
 }
 
 fn repl() {
@@ -40,16 +54,16 @@ fn repl() {
 
     loop {
         print!("> ");
-        let b1 = std::io::stdin().read_line(&mut line).unwrap();
+        std::io::Write::flush(&mut std::io::stdout()).expect("flush failed!");
+        std::io::stdin().read_line(&mut line).unwrap();
         let ast = parser
             .parse(&line)
             .expect(format!("Error occured during parsing").as_str());
         line.clear();
-        let result = interpreter
-            .eval_node(&ast)
-            .expect("Error during evaluating node");
-        println!("Result: {}", result.unwrap_or(JsValue::Undefined));
-    }
 
-    //  repl();
+        match interpreter.eval_node(&ast) {
+            Ok(result) =>  println!("{}", result.unwrap_or(JsValue::Undefined)),
+            Err(_) => println!("Error during evaluating node"),
+        }
+    }
 }

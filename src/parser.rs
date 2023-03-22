@@ -38,8 +38,18 @@ impl Parser {
             Some(TokenKind::IfKeyword) => self.parse_if_statement(),
             Some(TokenKind::OpenBrace) => self.parse_block_statement(),
             Some(TokenKind::PrintKeyword) => self.parse_print_statement(),
+            Some(TokenKind::WhileKeyword) => self.parse_while_statement(),
             _ => self.parse_expression_statement(),
         }
+    }
+
+    fn parse_while_statement(&mut self) -> Result<Node, String> {
+        self.eat(&TokenKind::WhileKeyword);
+        self.eat(&TokenKind::OpenParen);
+        let condition = self.parse_expression().unwrap();
+        self.eat(&TokenKind::CloseParen);
+        let body = self.parse_statement().unwrap();
+        return Ok(Node::WhileStatement(WhileStatementNode { condition: Box::new(condition), body: Box::new(body) }));
     }
 
     fn parse_print_statement(&mut self) -> Result<Node, String> {
@@ -97,7 +107,13 @@ impl Parser {
                 return Ok(Node::VariableDeclaration(VariableDeclarationNode {
                     id: id.to_string(),
                     kind: variable_kind,
-                    value: Box::new(expression),
+                    value: Some(Box::new(expression)),
+                }));
+            } else {
+                return Ok(Node::VariableDeclaration(VariableDeclarationNode {
+                    id: id.to_string(),
+                    kind: variable_kind,
+                    value: None,
                 }));
             }
         } else {
@@ -108,12 +124,32 @@ impl Parser {
     }
 
     fn parse_expression_statement(&mut self) -> Result<Node, String> {
-        let expression = self.parse_expression();
+        let expression = self.parse_assignment_expression();
 
         if let Some(TokenKind::Semicolon) = self.current_token {
             self.next_token();
-        } else {
-            return Err("Expected semicolon".to_string());
+        }
+
+        return expression;
+    }
+
+    fn parse_assignment_expression(&mut self) -> Result<Node, String> {
+        let mut expression = self.parse_expression();
+
+        let assignment_tokens = vec![&TokenKind::PlusEqual, &TokenKind::MinusEqual, &TokenKind::DivEqual, &TokenKind::MulEqual, &TokenKind::Equal];
+
+        while let Some(token) = &self.current_token {
+            if !assignment_tokens.contains(&token) {
+                break;
+            }
+            let operator = AssignmentOperator::try_from(token).unwrap();
+            self.next_token();
+            let right = self.parse_expression().unwrap();
+            expression = Ok(Node::AssignmentExpression(AssignmentExpressionNode {
+                left: Box::new(expression.unwrap()),
+                operator: operator,
+                right: Box::new(right),
+            }));
         }
 
         return expression;

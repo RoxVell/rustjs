@@ -23,12 +23,18 @@ pub enum TokenKind {
     MulMul,
     Div,
 
+    // Assignment
+    Equal,
+    PlusEqual,
+    MinusEqual,
+    MulEqual,
+    DivEqual,
+
     // Punctuation
     OpenParen,
     CloseParen,
     OpenBrace,
     CloseBrace,
-    Equal,
     EqualEqual,
     EqualEqualEqual,
     Colon,
@@ -118,6 +124,11 @@ impl Scanner {
         if current_char == '/' {
             self.current_pos += 1;
 
+            if let Some('=') = chars.next() {
+                self.current_pos += 1;
+                return Some(TokenKind::DivEqual);
+            }
+
             if let Some('/') = chars.next() {
                 self.current_pos += 1;
 
@@ -160,6 +171,11 @@ impl Scanner {
         if current_char == '+' {
             self.current_pos += 1;
 
+            if let Some('=') = chars.next() {
+                self.current_pos += 1;
+                return Some(TokenKind::PlusEqual);
+            }
+
             if let Some('+') = chars.next() {
                 self.current_pos += 1;
                 return Some(TokenKind::PlusPlus);
@@ -171,6 +187,11 @@ impl Scanner {
         if current_char == '*' {
             self.current_pos += 1;
 
+            if let Some('=') = chars.next() {
+                self.current_pos += 1;
+                return Some(TokenKind::MulEqual);
+            }
+
             if let Some('*') = chars.next() {
                 self.current_pos += 1;
                 return Some(TokenKind::MulMul);
@@ -181,6 +202,11 @@ impl Scanner {
 
         if current_char == '-' {
             self.current_pos += 1;
+
+            if let Some('=') = chars.next() {
+                self.current_pos += 1;
+                return Some(TokenKind::MinusEqual);
+            }
 
             if let Some('-') = chars.next() {
                 self.current_pos += 1;
