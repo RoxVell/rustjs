@@ -2,11 +2,11 @@ use std::fmt::Display;
 
 #[derive(Debug, Clone)]
 pub enum JsValue {
-  Undefined,
-  Null,
-  String(String),
-  Number(f64),
-  Boolean(bool),
+    Undefined,
+    Null,
+    String(String),
+    Number(f64),
+    Boolean(bool),
 }
 
 impl JsValue {
@@ -18,6 +18,20 @@ impl JsValue {
             JsValue::Number(_) => "number".to_string(),
             JsValue::Boolean(_) => "boolean".to_string(),
         }
+    }
+
+    pub fn to_bool(&self) -> bool {
+        match self {
+            JsValue::Undefined => false,
+            JsValue::Null => false,
+            JsValue::String(value) => value.len() != 0,
+            JsValue::Number(value) => *value != 0.0,
+            JsValue::Boolean(value) => *value,
+        }
+    }
+
+    pub fn to_bool_js_value(&self) -> Self {
+        JsValue::Boolean(self.to_bool())
     }
 }
 
@@ -32,4 +46,3 @@ impl Display for JsValue {
         }
     }
 }
-
