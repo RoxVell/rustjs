@@ -1,12 +1,29 @@
 use std::fmt::Display;
+use crate::node::NodeKind;
+use super::environment::Environment;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum JsValue {
     Undefined,
     Null,
     String(String),
     Number(f64),
     Boolean(bool),
+    Function(JsFunction),
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct JsFunction {
+    pub name: String,
+    pub arguments: Vec<JsFunctionArg>,
+    pub body: Box<NodeKind>,
+    pub environment: Box<Environment>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct JsFunctionArg {
+    pub name: String,
+    pub default_value: JsValue,
 }
 
 impl JsValue {
@@ -17,6 +34,7 @@ impl JsValue {
             JsValue::String(_) => "string".to_string(),
             JsValue::Number(_) => "number".to_string(),
             JsValue::Boolean(_) => "boolean".to_string(),
+            JsValue::Function(_) => "function".to_string(),
         }
     }
 
@@ -27,6 +45,7 @@ impl JsValue {
             JsValue::String(value) => value.len() != 0,
             JsValue::Number(value) => *value != 0.0,
             JsValue::Boolean(value) => *value,
+            JsValue::Function(_) => true,
         }
     }
 
@@ -43,6 +62,7 @@ impl Display for JsValue {
             JsValue::String(str) => write!(f, "\x1b[93m\"{}\"\x1b[0m", str),
             JsValue::Number(number) => write!(f, "\x1b[36m{}\x1b[0m", number),
             JsValue::Boolean(value) => write!(f, "{}", if *value { "true" } else { "false" }),
+            JsValue::Function(js_function) => write!(f, "[function {}]", js_function.name),
         }
     }
 }
