@@ -2,7 +2,7 @@ mod interpreter;
 mod node;
 mod parser;
 mod scanner;
-use interpreter::{Interpreter, JsValue, Environment};
+use interpreter::{create_js_object, Environment, Interpreter, JsObject, JsValue};
 use std::env;
 use std::fs;
 
@@ -50,7 +50,8 @@ fn main() {
 }
 
 fn eval_file(file_path: &str) {
-    let source_code = fs::read_to_string(file_path).expect("Should have been able to read the file");
+    let source_code =
+        fs::read_to_string(file_path).expect("Should have been able to read the file");
     eval(source_code.as_str(), true);
 }
 
@@ -84,6 +85,8 @@ fn eval_code(code: &str) -> JsValue {
 
     interpreter.eval_node(&ast).unwrap().unwrap()
 }
+
+use std::rc::Rc;
 
 #[test]
 fn get_variable_value_from_parent_environment() {
@@ -187,4 +190,83 @@ fn conditional_expression_equal_works() {
 fn conditional_expression_not_equal_works() {
     let code = "false ? 1 : 2;";
     assert_eq!(eval_code(code), JsValue::Number(2.0));
+}
+
+#[test]
+fn object_expression_works() {
+    let code = "let a = { a: 10 }; a;";
+    let expected = create_js_object(JsObject::new_with_properties([(
+        "a".to_string(),
+        JsValue::Number(10.0),
+    )]));
+    assert_eq!(eval_code(code), expected);
+}
+
+#[test]
+fn member_expression_works() {
+    let code = "let a = { b: 10 }; a.b;";
+    assert_eq!(eval_code(code), JsValue::Number(10.0));
+}
+
+#[test]
+fn nested_member_expression_works() {
+    let code = "let a = {
+        b: {
+            c: {
+                d: \"qwerty\"
+            }
+        }
+    };
+    a.b.c.d;";
+    assert_eq!(eval_code(code), JsValue::String("qwerty".to_string()));
+}
+
+#[test]
+fn assign_to_object_property_works() {
+    let code = "
+        let a = { b: 10 };
+        a.b = 20;
+        a.b;
+    ";
+    assert_eq!(eval_code(code), JsValue::Number(20.0));
+}
+
+#[test]
+fn mutate_object_as_reference_works() {
+    let code = "
+        let a = { b: 10 };
+        let c = { d: a };
+        a.b = 25;
+        c.d.b;
+    ";
+    assert_eq!(eval_code(code), JsValue::Number(25.0));
+}
+
+#[test]
+fn two_objects_must_be_checked_for_equality_by_reference() {
+    let code = "
+       let a = { b: { c: 10 } };
+
+       let d = {
+         e: {
+           f: a
+         }
+       };
+
+       d.e.f == a;
+    ";
+    assert_eq!(eval_code(code), JsValue::Boolean(true));
+
+    let code = "
+       let a = { b: { c: 10 } };
+
+       let d = {
+         e: {
+           f: {}
+         }
+       };
+
+       d.e.f == a;
+    ";
+    assert_eq!(eval_code(code), JsValue::Boolean(false));
 }

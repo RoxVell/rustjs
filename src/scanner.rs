@@ -15,8 +15,8 @@ pub enum Token {
     Comment(String),
 
     // Logical operations
-    Or,
-    And,
+    Or,  // ||
+    And, // &&
 
     // Bitwise
     BitwiseOr,
@@ -61,13 +61,15 @@ pub enum Token {
     CloseParen,
     OpenBrace,
     CloseBrace,
+    OpenSquareBracket,
+    CloseSquareBracket,
 
     Comma,
     Semicolon,
     Colon,
     Dot,
     Exclamatory, // !
-    Question, // ?
+    Question,    // ?
 
     // Keywords
     FunctionKeyword,
@@ -174,6 +176,8 @@ impl Token {
             Token::MoreThanOrEqual => ">=".to_string(),
             Token::Question => "?".to_string(),
             Token::Colon => ":".to_string(),
+            Token::OpenSquareBracket => "[".to_string(),
+            Token::CloseSquareBracket => "]".to_string(),
         }
     }
 }
@@ -259,6 +263,8 @@ impl Scanner {
             ')' => Some(Token::CloseParen),
             '{' => Some(Token::OpenBrace),
             '}' => Some(Token::CloseBrace),
+            '[' => Some(Token::OpenSquareBracket),
+            ']' => Some(Token::CloseSquareBracket),
             '.' => Some(Token::Dot),
             '?' => Some(Token::Question),
             _ => None,
@@ -349,7 +355,6 @@ impl Scanner {
             if let Some('=') = next_char {
                 self.current_pos += 1;
                 return Some(self.consume(Token::DivEqual));
-                //                return Some(TokenWithLocation { token: Token::DivEqual, start: Span { line: self.current_line, row: cursor }, end: Span { line: self.current_line, row: cursor } });
             }
 
             if let Some('/') = next_char {
@@ -363,7 +368,8 @@ impl Scanner {
                     }
                 }
 
-                let token = Token::Comment(self.source_code[self.current_pos..=cursor+1].to_string());
+                let token =
+                    Token::Comment(self.source_code[self.current_pos..=cursor + 1].to_string());
                 self.current_pos = cursor + 2;
                 return Some(self.consume(token));
             } else {
@@ -418,6 +424,14 @@ impl Scanner {
 
             if let Some('*') = next_char {
                 self.current_pos += 1;
+
+                let next_char = chars.next();
+
+                if let Some('=') = next_char {
+                    self.current_pos += 1;
+                    return Some(self.consume(Token::MulMulEqual));
+                }
+
                 return Some(self.consume(Token::MulMul));
             }
 

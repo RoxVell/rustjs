@@ -21,7 +21,54 @@ pub enum NodeKind {
     FunctionDeclaration(FunctionDeclarationNode),
     ReturnStatement(ReturnStatementNode),
     CallExpression(CallExpressionNode),
-    ConditionalExpression(ConditionalExpressionNode)
+    ConditionalExpression(ConditionalExpressionNode),
+    MemberExpression(MemberExpressionNode),
+    ClassDeclaration(ClassDeclarationNode),
+    NewExpression(NewExpressionNode),
+    ObjectProperty(ObjectPropertyNode),
+    ObjectExpression(ObjectExpressionNode),
+}
+
+impl TryFrom<Node> for ObjectPropertyNode {
+    type Error = String;
+
+    fn try_from(value: Node) -> Result<Self, Self::Error> {
+        match value.node {
+            NodeKind::ObjectProperty(node) => Ok(node),
+            _ => Err("".to_string()),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct NewExpressionNode {
+    pub callee: Box<Node>,
+    pub arguments: Vec<Node>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ObjectExpressionNode {
+    pub properties: Vec<ObjectPropertyNode>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ObjectPropertyNode {
+    pub key: Box<IdentifierNode>,
+    pub value: Box<Node>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ClassDeclarationNode {
+    pub name: Box<Node>,
+    pub parent: Option<Box<Node>>,
+    pub methods: Vec<Box<Node>>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct MemberExpressionNode {
+    pub computed: bool,
+    pub object: Box<Node>,
+    pub property: Box<Node>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -93,6 +140,7 @@ pub enum AssignmentOperator {
     SubEqual,
     DivEqual,
     MulEqual,
+    ExponentiationEqual,
     Equal,
 }
 
@@ -111,6 +159,7 @@ impl TryFrom<&Token> for AssignmentOperator {
             Token::PlusEqual => Ok(Self::AddEqual),
             Token::MinusEqual => Ok(Self::SubEqual),
             Token::MulEqual => Ok(Self::MulEqual),
+            Token::MulMulEqual => Ok(Self::ExponentiationEqual),
             Token::DivEqual => Ok(Self::DivEqual),
             Token::Equal => Ok(Self::Equal),
             _ => Err("Cannot convert token kind to assignment operator".to_string()),
@@ -157,6 +206,7 @@ pub enum BinaryOperator {
     Sub,
     Div,
     Mul,
+    MulMul,
     LogicalOr,
     LogicalAnd,
     MoreThan,
@@ -177,6 +227,7 @@ impl TryFrom<&Token> for BinaryOperator {
             Token::Plus => Ok(Self::Add),
             Token::Minus => Ok(Self::Sub),
             Token::Mul => Ok(Self::Mul),
+            Token::MulMul => Ok(Self::MulMul),
             Token::Div => Ok(Self::Div),
             Token::Or => Ok(Self::LogicalOr),
             Token::And => Ok(Self::LogicalAnd),
@@ -234,6 +285,7 @@ impl FormatNode for BinaryOperator {
             BinaryOperator::StrictEquality => "===".to_string(),
             BinaryOperator::Inequality => "!=".to_string(),
             BinaryOperator::StrictInequality => "!==".to_string(),
+            BinaryOperator::MulMul => todo!(),
         }
     }
 }
@@ -255,6 +307,7 @@ impl FormatNode for AssignmentOperator {
             AssignmentOperator::DivEqual => "/=".to_string(),
             AssignmentOperator::MulEqual => "*=".to_string(),
             AssignmentOperator::Equal => "=".to_string(),
+            AssignmentOperator::ExponentiationEqual => "**=".to_string(),
         }
     }
 }
@@ -286,70 +339,84 @@ impl FormatNode for NodeKind {
                 let operator = node.operator.format();
 
                 return format!("{left} {operator} {right}");
-            },
+            }
             NodeKind::VariableDeclaration(node) => {
                 let variable_kind = node.kind.format();
                 let variable_name = &node.id;
                 let variable_value = node.value.format();
                 return format!("{variable_kind} {variable_name} = {variable_value};");
-            },
+            }
             NodeKind::AssignmentExpression(node) => {
                 let assignment_kind = &node.operator.format();
                 let left = node.left.format();
                 let right = node.right.format();
                 return format!("{left} {assignment_kind} = {right}");
-            },
+            }
             NodeKind::BlockStatement(node) => {
                 let mut result = String::from("");
-                node.statements.iter().for_each(|x| result.push_str(x.node.format().as_str()));
-                return format!("{{
-{result}\n}}");
-            },
+                node.statements
+                    .iter()
+                    .for_each(|x| result.push_str(x.node.format().as_str()));
+                return format!(
+                    "{{
+{result}\n}}"
+                );
+            }
             NodeKind::IfStatement(node) => {
                 let condition = node.condition.as_ref().node.format();
                 let then_branch = node.then_branch.as_ref().node.format();
                 let else_branch = format!("else {}", node.else_branch.format());
 
                 return format!("if ({condition}) {then_branch} {else_branch}");
-            },
+            }
             NodeKind::PrintStatement(_) => {
                 unimplemented!()
-            },
+            }
             NodeKind::WhileStatement(_) => {
                 unimplemented!()
-            },
+            }
             NodeKind::ForStatement(node) => {
                 let init = node.init.format();
                 let test = node.test.format();
                 let update = node.update.format();
                 let body = node.body.format();
                 return format!("for ({init} {test}; {update}) {body}");
-            },
+            }
             NodeKind::FunctionDeclaration(node) => {
                 let function_name = &node.name.id;
                 let function_args = &node.arguments.iter().fold("".to_string(), |mut acc, a| {
                     let argument_name = &a.name;
-                    let argument_default_value = a.default_value.as_ref().map_or("".to_string(), |x| format!(" = {}", x.node.format()));
+                    let argument_default_value = a
+                        .default_value
+                        .as_ref()
+                        .map_or("".to_string(), |x| format!(" = {}", x.node.format()));
                     acc.push_str(format!("{argument_name}{argument_default_value}").as_str());
                     return acc;
                 });
                 let function_body = &node.body.format();
                 return format!("function {function_name}({function_args}) {function_body}");
-            },
+            }
             NodeKind::ReturnStatement(node) => {
                 return format!("return {}", node.expression.node.format());
-            },
+            }
             NodeKind::CallExpression(_) => {
                 unimplemented!()
-            },
+            }
             NodeKind::ProgramStatement(node) => {
                 let mut result = String::new();
-                node.statements.iter().for_each(|x| result.push_str(x.node.format().as_str()));
+                node.statements
+                    .iter()
+                    .for_each(|x| result.push_str(x.node.format().as_str()));
                 return result;
-            },
+            }
             NodeKind::ConditionalExpression(_) => {
                 unimplemented!()
-            },
+            }
+            NodeKind::MemberExpression(_) => todo!(),
+            NodeKind::ClassDeclaration(_) => todo!(),
+            NodeKind::ObjectProperty(_) => todo!(),
+            NodeKind::ObjectExpression(_) => todo!(),
+            NodeKind::NewExpression(_) => todo!(),
         }
     }
 }

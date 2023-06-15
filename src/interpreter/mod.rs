@@ -1,20 +1,19 @@
-use std::rc::Rc;
+use std::{cell::RefCell, cell::RefMut, rc::Rc};
 
 use crate::node::*;
 mod environment;
 use ariadne::{Label, Report, ReportKind, Source};
 pub use environment::Environment;
 mod js_value;
-pub use js_value::{JsFunction, JsFunctionArg, JsValue};
+pub use js_value::{create_js_object, JsFunction, JsFunctionArg, JsObject, JsValue};
+use std::collections::HashMap;
 
 pub struct Interpreter {
     environment: Environment,
-    //    env_stack: Vec<Environment>
 }
 
 impl Interpreter {
     pub fn eval_node(&mut self, node: &NodeKind) -> Result<Option<JsValue>, String> {
-//        println!("eval node: {:#?}", node);
         match node {
             NodeKind::StringLiteral(value) => Ok(Some(JsValue::String(value.to_string()))),
             NodeKind::NumberLiteral(value) => Ok(Some(JsValue::Number(*value))),
@@ -62,36 +61,161 @@ impl Interpreter {
             NodeKind::ForStatement(node) => {
                 self.eval_for_statement(node);
                 return Ok(None);
-            },
+            }
             NodeKind::ReturnStatement(node) => self.eval_return_statement(node).map(|x| Some(x)),
-            NodeKind::ConditionalExpression(node) => self.eval_conditional_expression(node).map(|x| Some(x)),
+            NodeKind::ConditionalExpression(node) => {
+                self.eval_conditional_expression(node).map(|x| Some(x))
+            }
+            NodeKind::ClassDeclaration(node) => self.eval_class_declaration(node).map(|x| Some(x)),
+            NodeKind::ObjectExpression(node) => self.eval_object_expression(node).map(|x| Some(x)),
+            NodeKind::MemberExpression(node) => self.eval_member_expression(node).map(|x| Some(x)),
             _ => todo!(),
         }
     }
 
-    fn eval_conditional_expression(&mut self, node: &ConditionalExpressionNode) -> Result<JsValue, String> {
+    fn eval_member_expression(&mut self, node: &MemberExpressionNode) -> Result<JsValue, String> {
+        //        let evaluated_key = self.eval_node(&node.property.node)?;
+
+        //        println!("evaluated_key {:#?}", evaluated_key);
+        //
+        // let evaluated_key = self.eval_node(&node.property.node)?.unwrap();
+        //
+        // let key = match evaluated_key {
+        //     JsValue::String(value) => value.clone(),
+        //     JsValue::Number(value) => value.to_string(),
+        // };
+        //
+        let property_key = self.eval_member_expression_key(&node)?;
+
+        let resolved_object = self.eval_node(&node.object.node)?;
+
+        if let Some(JsValue::Object(object)) = resolved_object {
+            return Ok(object
+                .borrow_mut()
+                .get_value_property(property_key.as_str()));
+        } else {
+            return Err("Is not an object".to_string());
+        }
+
+        unimplemented!()
+    }
+
+    fn eval_member_expression_key(
+        &mut self,
+        node: &MemberExpressionNode,
+    ) -> Result<String, String> {
+        println!("eval_member_expression_key: {:?}", node);
+        if node.computed {
+            let computed_key = self.eval_node(&node.property.as_ref().node)?.unwrap();
+
+            println!("Computed: {}", computed_key);
+
+            return match computed_key {
+                JsValue::String(value) => Ok(value),
+                JsValue::Number(value) => Ok(value.to_string()),
+                _ => Err("".to_string()),
+            };
+        } else {
+            if let NodeKind::Identifier(node) = &node.property.as_ref().node {
+                return Ok(node.id.clone());
+            } else {
+                return Err("Object key should be an identifier".to_string());
+            }
+        }
+
+        unimplemented!()
+    }
+
+    fn eval_object_expression(&mut self, node: &ObjectExpressionNode) -> Result<JsValue, String> {
+        let mut object_value = JsObject {
+            properties: HashMap::new(),
+        };
+
+        for property in &node.properties {
+            object_value.add_property(
+                &property.key.id,
+                self.eval_node(&property.value.node).unwrap().unwrap(),
+            );
+        }
+
+        return Ok(JsValue::Object(Rc::new(RefCell::new(object_value))));
+    }
+
+    fn eval_object_property(&mut self, node: &ObjectPropertyNode) -> Result<JsValue, String> {
+        return self.eval_node(&node.value.node).map(|x| x.unwrap());
+    }
+
+    fn eval_class_declaration(&mut self, node: &ClassDeclarationNode) -> Result<JsValue, String> {
+        for class_method in &node.methods {}
+
+        unimplemented!()
+
+        //        for fn_arg_node in &node.pa {
+        //            let default_value = fn_arg_node
+        //                .default_value
+        //                .as_ref()
+        //                .map(|node| self.eval_node(&node.as_ref().node).unwrap())
+        //                .flatten()
+        //                .unwrap_or(JsValue::Undefined);
+        //
+        //            arguments.push(JsFunctionArg {
+        //                name: fn_arg_node.name.clone(),
+        //                default_value,
+        //            });
+        //        }
+        //
+        //        let js_function_value = JsValue::Function(JsFunction {
+        //            name: node.name.id.clone(),
+        //            arguments,
+        //            environment: Box::new(self.environment.clone()),
+        //            body: Box::new(node.body.node.clone()),
+        //        });
+        //
+        //        println!("{:?}", js_function_value);
+        //
+        //        self.environment
+        //            .define_variable(node.name.id.clone(), js_function_value.clone())?;
+        //
+        //        return Ok(js_function_value);
+    }
+
+    fn eval_conditional_expression(
+        &mut self,
+        node: &ConditionalExpressionNode,
+    ) -> Result<JsValue, String> {
         let test = self.eval_node(&node.test.node)?.unwrap();
 
         if test.to_bool() {
-            return self.eval_node(&node.consequent.node).map(|x| x.unwrap_or(JsValue::Undefined));
+            return self
+                .eval_node(&node.consequent.node)
+                .map(|x| x.unwrap_or(JsValue::Undefined));
         } else {
-            return self.eval_node(&node.alternative.node).map(|x| x.unwrap_or(JsValue::Undefined));
+            return self
+                .eval_node(&node.alternative.node)
+                .map(|x| x.unwrap_or(JsValue::Undefined));
         }
     }
 
     fn eval_return_statement(&mut self, node: &ReturnStatementNode) -> Result<JsValue, String> {
-        self.eval_node(&node.expression.node).map(|x| x.unwrap_or(JsValue::Undefined))
+        self.eval_node(&node.expression.node)
+            .map(|x| x.unwrap_or(JsValue::Undefined))
     }
 
     fn eval_for_statement(&mut self, node: &ForStatementNode) {
-        println!("eval_for_statement: {:?}", node);
         if node.init.is_some() {
             self.eval_node(&node.init.as_ref().unwrap().node).unwrap();
         }
 
-        while self.eval_node(&node.test.as_ref().unwrap().node).unwrap().unwrap().to_bool() {
+        while self
+            .eval_node(&node.test.as_ref().unwrap().node)
+            .unwrap()
+            .unwrap()
+            .to_bool()
+        {
             self.eval_node(&node.body.as_ref().node).unwrap();
-            self.eval_node(&node.update.as_ref().unwrap().node).unwrap().unwrap();
+            self.eval_node(&node.update.as_ref().unwrap().node)
+                .unwrap()
+                .unwrap();
         }
     }
 
@@ -99,13 +223,24 @@ impl Interpreter {
         let callee = self.eval_node(&node.callee.node)?;
 
         if let Some(JsValue::Function(function)) = &callee {
-            let mut function_execution_environment = Environment::new(Box::new(self.environment.clone()));
-            function.arguments.iter().zip(&node.params).for_each(|(arg, node)| {
-                function_execution_environment.define_variable(arg.name.clone(), self.eval_node(&node.node).unwrap().unwrap_or(JsValue::Undefined));
-            });
+            let mut function_execution_environment = self.create_new_environment();
+            function
+                .arguments
+                .iter()
+                .zip(&node.params)
+                .for_each(|(arg, node)| {
+                    function_execution_environment
+                        .define_variable(
+                            arg.name.clone(),
+                            self.eval_node(&node.node)
+                                .unwrap()
+                                .unwrap_or(JsValue::Undefined),
+                        )
+                        .unwrap();
+                });
             self.environment = function_execution_environment;
             let result = self.eval_node(function.body.as_ref());
-            self.environment = self.environment.get_parent().unwrap();
+            self.pop_environment();
             return result.map(|x| x.unwrap_or(JsValue::Undefined));
         } else {
             return Err(format!(
@@ -113,6 +248,14 @@ impl Interpreter {
                 callee.unwrap().get_type_as_str()
             ));
         }
+    }
+
+    fn create_new_environment(&self) -> Environment {
+        return Environment::new(Box::new(self.environment.clone()));
+    }
+
+    fn pop_environment(&mut self) {
+        self.environment = self.environment.get_parent().unwrap();
     }
 
     fn eval_function_declaration(
@@ -170,13 +313,19 @@ impl Interpreter {
                         self.sub(&original_value, &right_hand_value)
                     }
                     AssignmentOperator::DivEqual => {
-                        let original_value = self.environment.get_variable_value(&id_node.id).unwrap();
+                        let original_value =
+                            self.environment.get_variable_value(&id_node.id).unwrap();
                         self.div(&original_value, &right_hand_value)
                     }
                     AssignmentOperator::MulEqual => {
                         let original_value =
                             self.environment.get_variable_value(&id_node.id).unwrap();
                         self.mul(&original_value, &right_hand_value)
+                    }
+                    AssignmentOperator::ExponentiationEqual => {
+                        let original_value =
+                            self.environment.get_variable_value(&id_node.id).unwrap();
+                        self.exponentiation(&original_value, &right_hand_value)
                     }
                     AssignmentOperator::Equal => Ok(right_hand_value),
                 }
@@ -187,7 +336,44 @@ impl Interpreter {
                     .unwrap();
                 return Ok(new_variable_value);
             }
+            NodeKind::MemberExpression(node) => {
+                let object = self.eval_node(&node.object.node)?.unwrap();
+
+                if let JsValue::Object(object_value) = object {
+                    let mut object = object_value;
+
+                    let key = self.eval_member_expression_key(&node)?;
+
+                    object
+                        .borrow_mut()
+                        .add_property(key.as_str(), right_hand_value);
+
+                    return Ok(JsValue::Object(object));
+                } else {
+                    return Err(
+                        "Cannot assign: left hand side expression is not an object".to_string()
+                    );
+                }
+            }
             _ => todo!(),
+        }
+    }
+
+    fn get_member_expression_key(&mut self, node: &Node) -> Result<String, String> {
+        match &node.node {
+            NodeKind::Identifier(node) => Ok(node.id.clone()),
+            node => {
+                let evaluated_node = self.eval_node(&node)?.unwrap();
+
+                match evaluated_node {
+                    JsValue::String(value) => Ok(value),
+                    JsValue::Number(value) => Ok(value.to_string()),
+                    value => Err(format!(
+                        "Type {} cannot be used as an object key",
+                        value.get_type_as_str()
+                    )),
+                }
+            }
         }
     }
 
@@ -229,6 +415,7 @@ impl Interpreter {
     }
 
     fn eval_identifier(&self, node: &IdentifierNode) -> Result<JsValue, String> {
+        // println!("eval_identifier {:#?}", node);
         return self
             .environment
             .get_variable_value(&node.id)
@@ -263,11 +450,19 @@ impl Interpreter {
             BinaryOperator::Mul => self
                 .mul(&evaluated_left_node, &evaluated_right_node)
                 .map_err(|_e| format!("")),
+            BinaryOperator::MulMul => {
+                self.exponentiation(&evaluated_left_node, &evaluated_right_node)
+            }
             BinaryOperator::LogicalOr => {
                 self.logical_or(&evaluated_left_node, &evaluated_right_node)
             }
-            BinaryOperator::LogicalAnd => self.logical_and(&evaluated_left_node, &evaluated_right_node),
-            BinaryOperator::MoreThan | BinaryOperator::MoreThanOrEqual | BinaryOperator::LessThan | BinaryOperator::LessThanOrEqual => {
+            BinaryOperator::LogicalAnd => {
+                self.logical_and(&evaluated_left_node, &evaluated_right_node)
+            }
+            BinaryOperator::MoreThan
+            | BinaryOperator::MoreThanOrEqual
+            | BinaryOperator::LessThan
+            | BinaryOperator::LessThanOrEqual => {
                 if let JsValue::Number(left_number) = evaluated_left_node {
                     if let JsValue::Number(right_number) = evaluated_right_node {
                         let value = match node.operator {
@@ -275,30 +470,63 @@ impl Interpreter {
                             BinaryOperator::MoreThanOrEqual => left_number >= right_number,
                             BinaryOperator::LessThan => left_number < right_number,
                             BinaryOperator::LessThanOrEqual => left_number <= right_number,
-                            _ => unreachable!()
+                            _ => unreachable!(),
                         };
 
                         return Ok(JsValue::Boolean(value));
                     }
                 }
 
-                Err(format!("Cannot compare value with type \"{}\" and \"{}\"", evaluated_left_node.get_type_as_str(), evaluated_right_node.get_type_as_str()).to_string())
-            },
-            BinaryOperator::Equality | BinaryOperator::StrictEquality | BinaryOperator::Inequality | BinaryOperator::StrictInequality => {
+                Err(format!(
+                    "Cannot compare value with type \"{}\" and \"{}\"",
+                    evaluated_left_node.get_type_as_str(),
+                    evaluated_right_node.get_type_as_str()
+                )
+                .to_string())
+            }
+            BinaryOperator::Equality
+            | BinaryOperator::StrictEquality
+            | BinaryOperator::Inequality
+            | BinaryOperator::StrictInequality => {
                 if let JsValue::Number(left_number) = evaluated_left_node {
                     if let JsValue::Number(right_number) = evaluated_right_node {
                         let value = match node.operator {
-                            BinaryOperator::Equality | BinaryOperator::StrictEquality => left_number == right_number,
-                            BinaryOperator::Inequality | BinaryOperator::StrictInequality => left_number != right_number,
-                            _ => unreachable!()
+                            BinaryOperator::Equality | BinaryOperator::StrictEquality => {
+                                left_number == right_number
+                            }
+                            BinaryOperator::Inequality | BinaryOperator::StrictInequality => {
+                                left_number != right_number
+                            }
+                            _ => unreachable!(),
                         };
 
                         return Ok(JsValue::Boolean(value));
                     }
                 }
 
-                Err(format!("Cannot compare value with type \"{}\" and \"{}\"", evaluated_left_node.get_type_as_str(), evaluated_right_node.get_type_as_str()).to_string())
-            },
+                if let JsValue::Object(object_left) = &evaluated_left_node {
+                    if let JsValue::Object(object_right) = &evaluated_right_node {
+                        let value = match node.operator {
+                            BinaryOperator::Equality | BinaryOperator::StrictEquality => {
+                                object_left == object_right
+                            }
+                            BinaryOperator::Inequality | BinaryOperator::StrictInequality => {
+                                object_left != object_right
+                            }
+                            _ => unreachable!(),
+                        };
+
+                        return Ok(JsValue::Boolean(value));
+                    }
+                }
+
+                Err(format!(
+                    "Cannot compare value with type \"{}\" and \"{}\"",
+                    evaluated_left_node.get_type_as_str(),
+                    evaluated_right_node.get_type_as_str()
+                )
+                .to_string())
+            }
         }
     }
 
@@ -316,10 +544,7 @@ impl Interpreter {
         return Ok(right.clone());
     }
 
-    fn eval_statements(
-        &mut self,
-        statements: &Vec<Node>,
-    ) -> Result<Option<JsValue>, String> {
+    fn eval_statements(&mut self, statements: &Vec<Node>) -> Result<Option<JsValue>, String> {
         let mut result: Option<JsValue> = None;
 
         for statement in statements {
@@ -336,6 +561,19 @@ impl Interpreter {
             }
             _ => Err(format!(
                 "division of types '{}' and '{}' is not possible",
+                left.get_type_as_str(),
+                right.get_type_as_str()
+            )),
+        }
+    }
+
+    fn exponentiation(&self, left: &JsValue, right: &JsValue) -> Result<JsValue, String> {
+        match (left, right) {
+            (JsValue::Number(left_number), JsValue::Number(right_number)) => {
+                Ok(JsValue::Number(left_number.powf(*right_number)))
+            }
+            _ => Err(format!(
+                "exponentiation of types '{}' and '{}' is not possible",
                 left.get_type_as_str(),
                 right.get_type_as_str()
             )),
@@ -381,13 +619,11 @@ impl Interpreter {
             (JsValue::Number(left_number), JsValue::Number(right_number)) => {
                 Ok(JsValue::Number(left_number + right_number))
             }
-            _ => {
-                Err(format!(
-                    "addition of types '{}' and '{}' is not possible",
-                    left.get_type_as_str(),
-                    right.get_type_as_str()
-                ))
-            }
+            _ => Err(format!(
+                "addition of types '{}' and '{}' is not possible",
+                left.get_type_as_str(),
+                right.get_type_as_str()
+            )),
         }
     }
 }
@@ -395,9 +631,6 @@ impl Interpreter {
 impl Default for Interpreter {
     fn default() -> Self {
         let env = Environment::default();
-        Self {
-            environment: env,
-            //            env_stack: vec![env]
-        }
+        Self { environment: env }
     }
 }
