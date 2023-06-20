@@ -885,9 +885,7 @@ impl Parser {
                         .with_message(&error_message),
                 )
                 .finish()
-                .print(Source::from(include_str!(
-                    "/Users/anton/rust-projects/js-engine/a.js"
-                )))
+                .print(Source::from(self.source.clone()))
                 .unwrap();
 
             panic!("{error_message}");
