@@ -558,7 +558,7 @@ impl Parser {
             Some(Token::OpenParen) => return self.parse_paranthesised_expression(),
             Some(Token::Identifier(_)) => return self.parse_call_expression(),
             Some(Token::NewKeyword) => return self.parse_new_expression(),
-            // Some(Token::OpenBrace) => return self.parse_object_literal(),
+            Some(Token::OpenBrace) => return self.parse_object_literal(),
             _ => {
                 let mut colors = ColorGenerator::new();
                 let a = colors.next();
