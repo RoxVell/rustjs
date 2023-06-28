@@ -4,11 +4,12 @@ use std::fmt;
 #[derive(Debug, Clone, PartialEq)]
 pub enum NodeKind {
     ProgramStatement(ProgramNode),
-    StringLiteral(String),
+    StringLiteral(StringLiteralNode),
     NumberLiteral(f64),
     BooleanLiteral(bool),
     NullLiteral,
     UndefinedLiteral,
+    ThisExpression,
     Identifier(IdentifierNode),
     BinaryExpression(BinaryExpressionNode),
     VariableDeclaration(VariableDeclarationNode),
@@ -19,6 +20,7 @@ pub enum NodeKind {
     WhileStatement(WhileStatementNode),
     ForStatement(ForStatementNode),
     FunctionDeclaration(FunctionDeclarationNode),
+    FunctionExpression(FunctionExpressionNode),
     ReturnStatement(ReturnStatementNode),
     CallExpression(CallExpressionNode),
     ConditionalExpression(ConditionalExpressionNode),
@@ -40,6 +42,17 @@ impl TryFrom<Node> for ObjectPropertyNode {
     }
 }
 
+//impl Into<NodeKind> for &StringLiteralNode {
+//    fn into(self) -> NodeKind {
+//        NodeKind::StringLiteral(*self)
+//    }
+//}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct StringLiteralNode {
+    pub value: String,
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct NewExpressionNode {
     pub callee: Box<Node>,
@@ -53,7 +66,8 @@ pub struct ObjectExpressionNode {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ObjectPropertyNode {
-    pub key: Box<IdentifierNode>,
+    pub computed: bool,
+    pub key: Box<Node>,
     pub value: Box<Node>,
 }
 
@@ -124,6 +138,12 @@ impl From<IdentifierNode> for NodeKind {
 #[derive(Debug, Clone, PartialEq)]
 pub struct FunctionDeclarationNode {
     pub name: Box<IdentifierNode>,
+    pub arguments: Vec<FunctionArgument>,
+    pub body: Box<Node>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct FunctionExpressionNode {
     pub arguments: Vec<FunctionArgument>,
     pub body: Box<Node>,
 }
@@ -327,7 +347,7 @@ impl FormatNode for Option<Box<Node>> {
 impl FormatNode for NodeKind {
     fn format(&self) -> String {
         match self {
-            NodeKind::StringLiteral(value) => format!("\'{value}\'"),
+            NodeKind::StringLiteral(node) => format!("\'{}\'", node.value),
             NodeKind::NumberLiteral(value) => format!("{value}"),
             NodeKind::BooleanLiteral(value) => format!("{value}"),
             NodeKind::NullLiteral => "null".to_string(),
@@ -416,7 +436,9 @@ impl FormatNode for NodeKind {
             NodeKind::ClassDeclaration(_) => todo!(),
             NodeKind::ObjectProperty(_) => todo!(),
             NodeKind::ObjectExpression(_) => todo!(),
-            NodeKind::NewExpression(_) => todo!(),
+            NodeKind::NewExpression(_) => "new".to_string(),
+            NodeKind::ThisExpression => "this".to_string(),
+            NodeKind::FunctionExpression(_) => todo!(),
         }
     }
 }

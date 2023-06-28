@@ -21,18 +21,19 @@ impl Default for Parser {
 }
 
 impl Parser {
-    pub fn parse_code_to_ast(code: &str) -> Result<NodeKind, String> {
+    pub fn parse_code_to_ast(code: &str) -> Result<Node, String> {
         let mut parser = Parser::default();
         return parser.parse(code);
     }
 
-    pub fn parse(&mut self, source: &str) -> Result<NodeKind, String> {
+    pub fn parse(&mut self, source: &str) -> Result<Node, String> {
         self.source = source.to_string();
         self.scanner = Scanner::new(source.to_string());
 
         let mut statements: Vec<Node> = vec![];
 
         self.current_token = self.scanner.next_token();
+        let start_span = self.get_start_span();
 
         while let Some(token) = &self.current_token {
             if let Token::Comment(_) = token.token {
@@ -44,7 +45,7 @@ impl Parser {
             statements.push(statement);
         }
 
-        return Ok(NodeKind::ProgramStatement(ProgramNode { statements }));
+        return Ok(self.consume(NodeKind::ProgramStatement(ProgramNode { statements }), start_span));
     }
 
     fn get_start_span(&mut self) -> Span {
@@ -166,29 +167,7 @@ impl Parser {
     fn parse_function_declaration(&mut self) -> Result<Node, String> {
         let start_span = self.get_start_span();
         self.eat(&Token::FunctionKeyword);
-
         return self.parse_function_signature(start_span);
-        //        let function_name = self.parse_identifier().expect("Expected function name");
-        //
-        //        self.eat(&Token::OpenParen);
-        //        let arguments = self.parse_comma_sequence(&Token::CloseParen, &Self::parse_function_argument)?;
-        //        self.eat(&Token::CloseParen);
-        //
-        //        let body = self.parse_statement().unwrap();
-        //
-        //        // TODO: get rid of exhaustive check
-        //        if let NodeKind::Identifier(id_node) = function_name.node {
-        //            return Ok(self.consume(
-        //                NodeKind::FunctionDeclaration(FunctionDeclarationNode {
-        //                    name: Box::new(id_node),
-        //                    arguments: arguments,
-        //                    body: Box::new(body),
-        //                }),
-        //                start_span,
-        //            ));
-        //        }
-
-        unreachable!()
     }
 
     fn parse_function_signature(&mut self, start_span: Span) -> Result<Node, String> {
@@ -215,6 +194,10 @@ impl Parser {
 
         unreachable!()
     }
+
+//    fn parse_function_arguments(&mut self, start_span: Span) -> Result<Vec<FunctionArgument>, String> {
+//
+//    }
 
     fn parse_function_argument(&mut self) -> Result<FunctionArgument, String> {
         let start_span = self.get_start_span();
@@ -443,6 +426,14 @@ impl Parser {
         return self.parse_binary_expression(&Self::parse_primary_expression, &[Token::MulMul]);
     }
 
+//    fn function_call_new_computed_member_access(&mut self) -> Result<Node, String> {
+//        match self.get_current_token() {
+//            Some(Token::NewKeyword) => return self.parse_new_expression(),
+//            Some(Token::OpenParen) => return self.parse_call_expression(),
+//            _ => self.parse
+//        }
+//    }
+
     fn parse_comparison_expression(&mut self) -> Result<Node, String> {
         return self.parse_binary_expression(
             &Self::parse_addition_binary_expression,
@@ -548,21 +539,21 @@ impl Parser {
     }
 
     fn parse_primary_expression(&mut self) -> Result<Node, String> {
+        println!("parse_primary_expression {:?}", self.get_current_token());
         match self.get_current_token() {
             Some(Token::ClassKeyword) => return self.parse_class_expression(),
+            Some(Token::FunctionKeyword) => return self.parse_function_expression(),
             Some(Token::Number(_)) => return self.parse_number_literal(),
             Some(Token::String(_)) => return self.parse_string_literal(),
             Some(Token::Boolean(_)) => return self.parse_bool_literal(),
             Some(Token::Null) => return self.parse_null_literal(),
             Some(Token::Undefined) => return self.parse_undefined_literal(),
-            Some(Token::OpenParen) => return self.parse_paranthesised_expression(),
-            Some(Token::Identifier(_)) => return self.parse_call_expression(),
+            Some(Token::OpenParen) => return self.parse_call_expression(),
+            Some(Token::Identifier(_)) | Some(Token::ThisKeyword) => return self.parse_call_expression(),
             Some(Token::NewKeyword) => return self.parse_new_expression(),
             Some(Token::OpenBrace) => return self.parse_object_literal(),
             _ => {
                 let mut colors = ColorGenerator::new();
-                let a = colors.next();
-
                 let token = self.current_token.as_ref().unwrap();
 
                 Report::build(ReportKind::Error, (), token.start.row)
@@ -570,7 +561,7 @@ impl Parser {
                     .with_label(
                         Label::new(token.start.row..token.end.row)
                             .with_message("Unexpected token")
-                            .with_color(a),
+                            .with_color(colors.next()),
                     )
                     .finish()
                     .print(Source::from(&self.source))
@@ -579,6 +570,34 @@ impl Parser {
                 unimplemented!()
             }
         }
+    }
+
+    fn parse_function_expression(&mut self) -> Result<Node, String> {
+        let start_span = self.get_start_span();
+
+        self.eat(&Token::FunctionKeyword);
+
+        self.eat(&Token::OpenParen);
+        let arguments =
+            self.parse_comma_sequence(&Token::CloseParen, &Self::parse_function_argument)?;
+        self.eat(&Token::CloseParen);
+
+        let body = self.parse_statement().unwrap();
+
+        // TODO: get rid of exhaustive check
+            return Ok(self.consume(
+                NodeKind::FunctionExpression(FunctionExpressionNode {
+                    arguments: arguments,
+                    body: Box::new(body),
+                }),
+                start_span,
+            ));
+    }
+
+    fn parse_this_expression(&mut self) -> Result<Node, String> {
+        let start_span = self.get_start_span();
+        self.eat(&Token::ThisKeyword);
+        return Ok(self.consume(NodeKind::ThisExpression, start_span));
     }
 
     fn parse_object_literal(&mut self) -> Result<Node, String> {
@@ -616,40 +635,34 @@ impl Parser {
     fn parse_object_property(&mut self) -> Result<Node, String> {
         let start_span = self.get_start_span();
 
-        let key = self.parse_identifier()?;
+        let (is_computed, key) = self.parse_object_property_key()?;
+        self.eat(&Token::Colon);
+        let value = self.parse_expression()?;
 
-        // match key.node {
-        //     NodeKind::Identifier(node) => {}
-        // }
-
-        if let NodeKind::Identifier(node) = key.node {
-            self.eat(&Token::Colon);
-            let value = self.parse_expression()?;
-
-            return Ok(self.consume(
-                NodeKind::ObjectProperty(ObjectPropertyNode {
-                    key: Box::new(node),
-                    value: Box::new(value),
-                }),
-                start_span,
-            ));
-        }
-
-        return Err("Not a identifier".to_string());
+        return Ok(self.consume(
+            NodeKind::ObjectProperty(ObjectPropertyNode {
+                computed: is_computed,
+                key: Box::new(key),
+                value: Box::new(value),
+            }),
+            start_span,
+        ));
     }
 
-    // fn parse_object_property_key(&mut self) -> Result<Node, String> {
-    //     match &self.get_current_token() {
-    //         Some(TokenKind::OpenSquareBracket) => {
-    //             self.eat(&Token::OpenSquareBracket);
-    //             let expression = self.parse_expression();
-    //             self.eat(&Token::CloseSquareBracket);
-    //             return expression;
-    //         }
-    //         _ => {}
-    //     }
-    //     unimplemented!()
-    // }
+     fn parse_object_property_key(&mut self) -> Result<(bool, Node), String> {
+        return match &self.get_current_token() {
+            Some(Token::OpenSquareBracket) => {
+                self.eat(&Token::OpenSquareBracket);
+                let expression = self.parse_expression()?;
+                self.eat(&Token::CloseSquareBracket);
+                return Ok((true, expression));
+            },
+            Some(Token::Identifier(node)) => Ok((false, self.parse_identifier()?)),
+            Some(Token::String(_)) => Ok((false, self.parse_string_literal()?)),
+            Some(Token::Number(_)) => Ok((false, self.parse_number_literal()?)),
+            _ => Err(format!("{} cannot used as an object key", self.get_current_token().unwrap().to_keyword()))
+        };
+     }
 
     fn parse_new_expression(&mut self) -> Result<Node, String> {
         let start_span = self.get_start_span();
@@ -712,28 +725,16 @@ impl Parser {
             if let Some(&Token::Dot) = self.get_current_token() {}
         }
 
-        // while let Some(&Token::Dot) = self.get_current_token() {
-        //     self.eat(&Token::Dot);
-        //     let property = self.parse_literal()?;
-        //
-        //     literal = self.consume(
-        //         NodeKind::MemberExpression(MemberExpressionNode {
-        //             object: Box::new(literal),
-        //             property: Box::new(property),
-        //         }),
-        //         start_span,
-        //     );
-        // }
-
         return Ok(literal);
     }
 
     fn parse_call_signature(&mut self, start_span: Span) -> Result<Node, String> {
         let literal = self.parse_member_expression()?;
 
+        println!("parse_call_signature {:?}", literal);
+
         if self.is_callee(&literal.node) {
             if let Some(Token::OpenParen) = self.get_current_token() {
-                //                if let Node { node: NodeKind::Identifier(_), .. } = &literal {
                 self.eat(&Token::OpenParen);
                 let params =
                     self.parse_comma_sequence(&Token::CloseParen, &Self::parse_expression)?;
@@ -745,9 +746,6 @@ impl Parser {
                     }),
                     start_span,
                 ));
-                //                } else {
-                //                    return Err("Expected identifier in call expression".to_string());
-                //                }
             }
         }
 
@@ -755,20 +753,24 @@ impl Parser {
     }
 
     fn is_callee(&mut self, node: &NodeKind) -> bool {
+        println!("is_callee {:?}", node);
         match node {
-            NodeKind::Identifier(_) | NodeKind::MemberExpression(_) => true,
+            NodeKind::Identifier(_) | NodeKind::MemberExpression(_) | NodeKind::ThisExpression | NodeKind::FunctionExpression(_) => true,
             _ => false,
         }
     }
 
     fn parse_literal(&mut self) -> Result<Node, String> {
         match self.get_current_token() {
+            Some(Token::ThisKeyword) => return self.parse_this_expression(),
             Some(Token::Number(_)) => return self.parse_number_literal(),
             Some(Token::String(_)) => return self.parse_string_literal(),
             Some(Token::Boolean(_)) => return self.parse_bool_literal(),
             Some(Token::Null) => return self.parse_null_literal(),
             Some(Token::Undefined) => return self.parse_undefined_literal(),
             Some(Token::Identifier(_)) => return self.parse_identifier(),
+            Some(Token::FunctionKeyword) => return self.parse_function_expression(),
+            Some(Token::OpenParen) => return self.parse_paranthesised_expression(),
             _ => unimplemented!(),
         }
     }
@@ -776,6 +778,7 @@ impl Parser {
     fn parse_paranthesised_expression(&mut self) -> Result<Node, String> {
         self.eat(&Token::OpenParen);
         let expression = self.parse_expression();
+        println!("parse_paranthesised_expression: {expression:?}");
         self.eat(&Token::CloseParen);
         return expression;
     }
@@ -812,7 +815,7 @@ impl Parser {
         if let Some(Token::String(str)) = self.get_current_token() {
             let str = str.clone();
             self.next_token();
-            return Ok(self.consume(NodeKind::StringLiteral(str), start_span));
+            return Ok(self.consume(NodeKind::StringLiteral(StringLiteralNode { value: str }), start_span));
         }
 
         unreachable!()

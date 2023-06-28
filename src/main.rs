@@ -2,9 +2,10 @@ mod interpreter;
 mod node;
 mod parser;
 mod scanner;
-use interpreter::{create_js_object, Environment, Interpreter, JsObject, JsValue};
+use interpreter::*;
 use std::env;
 use std::fs;
+use std::{cell::RefCell, rc::Rc, cell::RefMut};
 
 fn eval(code: &str, is_debug: bool) {
     println!("-----DEBUG (printing tokens)-----");
@@ -30,7 +31,7 @@ fn eval(code: &str, is_debug: bool) {
 
     let mut interpreter = Interpreter::default();
     let result = interpreter
-        .eval_node(&ast)
+        .eval_node(&ast.node)
         .expect("Error during evaluating node");
 
     match result {
@@ -52,6 +53,11 @@ fn main() {
 fn eval_file(file_path: &str) {
     let source_code =
         fs::read_to_string(file_path).expect("Should have been able to read the file");
+//    let mut parser = parser::Parser::default();
+//    let ast = parser
+//        .parse(&source_code)
+//        .expect(format!("Error occured during parsing").as_str());
+//    walk(&ast);
     eval(source_code.as_str(), true);
 }
 
@@ -70,7 +76,7 @@ fn repl() {
             .expect(format!("Error occured during parsing").as_str());
         line.clear();
 
-        match interpreter.eval_node(&ast) {
+        match interpreter.eval_node(&ast.node) {
             Ok(result) => println!("{}", result.unwrap_or(JsValue::Undefined)),
             Err(e) => println!("\x1b[31mError during evaluating node: {e}\x1b[0m"),
         }
@@ -83,10 +89,15 @@ fn eval_code(code: &str) -> JsValue {
     let ast = parser::Parser::parse_code_to_ast(code)
         .expect(format!("Error occured during parsing").as_str());
 
-    interpreter.eval_node(&ast).unwrap().unwrap()
+    interpreter.eval_node(&ast.node).unwrap().unwrap()
 }
 
-use std::rc::Rc;
+fn interpret(interpreter: &mut Interpreter, code: &str) -> JsValue {
+    let ast = parser::Parser::parse_code_to_ast(code)
+        .expect(format!("Error occured during parsing").as_str());
+
+    interpreter.eval_node(&ast.node).unwrap().unwrap()
+}
 
 #[test]
 fn get_variable_value_from_parent_environment() {
@@ -96,7 +107,7 @@ fn get_variable_value_from_parent_environment() {
     let mut parent_env = Environment::default();
     parent_env.define_variable(variable_name.to_string(), variable_value.clone());
 
-    let child_env = Environment::new(Box::new(parent_env));
+    let child_env = Environment::new(Rc::new(RefCell::new(parent_env)));
     let value_from_parent_env = child_env.get_variable_value(variable_name).unwrap();
 
     assert_eq!(value_from_parent_env, variable_value);
@@ -194,23 +205,52 @@ fn conditional_expression_not_equal_works() {
 
 #[test]
 fn object_expression_works() {
-    let code = "let a = { a: 10 }; a;";
-    let expected = create_js_object(JsObject::new_with_properties([(
-        "a".to_string(),
-        JsValue::Number(10.0),
-    )]));
-    assert_eq!(eval_code(code), expected);
+    let code = "
+        let a = {
+            5: 2 + 3,
+            \"qwe-123\": \"string prop\",
+            abc: \"identifier prop\",
+            [\"hello \" + 123]: \"hello 123\",
+        };
+
+        a;
+    ";
+
+    let mut interpreter = Interpreter::default();
+
+    let expected = create_js_object(JsObject::new_with_properties([
+        ("5".to_string(), JsValue::Number(5.0)),
+        ("qwe-123".to_string(), JsValue::String("string prop".to_string())),
+        ("abc".to_string(), JsValue::String("identifier prop".to_string())),
+        ("hello 123".to_string(), JsValue::String("hello 123".to_string())),
+    ]));
+
+    assert_eq!(interpret(&mut interpreter, code), expected);
+    assert_eq!(interpret(&mut interpreter, "a[5];"), JsValue::Number(5.0));
+    assert_eq!(interpret(&mut interpreter, "a['qwe-123'];"), JsValue::String("string prop".to_string()));
+    assert_eq!(interpret(&mut interpreter, "a['abc'];"), JsValue::String("identifier prop".to_string()));
+    assert_eq!(interpret(&mut interpreter, "a.abc;"), JsValue::String("identifier prop".to_string()));
+    assert_eq!(interpret(&mut interpreter, "a['hello ' + 123];"), JsValue::String("hello 123".to_string()));
 }
 
 #[test]
-fn member_expression_works() {
-    let code = "let a = { b: 10 }; a.b;";
-    assert_eq!(eval_code(code), JsValue::Number(10.0));
+fn object_function_property() {
+    let code = "
+        let a = {
+            b: function(a,b) {
+                return a * 2 + b;
+            }
+        };
+
+        a.b(3, 2);
+    ";
+    assert_eq!(eval_code(code), JsValue::Number(8.0));
 }
 
 #[test]
 fn nested_member_expression_works() {
-    let code = "let a = {
+    let code = "
+    let a = {
         b: {
             c: {
                 d: \"qwerty\"
@@ -240,6 +280,27 @@ fn mutate_object_as_reference_works() {
         c.d.b;
     ";
     assert_eq!(eval_code(code), JsValue::Number(25.0));
+}
+
+#[test]
+fn object_method_this_expression() {
+    let mut interpreter = Interpreter::default();
+
+    let code = "
+        let a = {
+          abc: 10,
+          getAbc: function(a, b) {
+            return this.abc;
+          },
+          setAbc: function(newValue) {
+            this.abc = newValue;
+          }
+        };
+
+        a.getAbc();
+    ";
+    assert_eq!(interpret(&mut interpreter, code), JsValue::Number(10.0));
+    assert_eq!(interpret(&mut interpreter, "a.setAbc(25); a.getAbc();"), JsValue::Number(25.0));
 }
 
 #[test]

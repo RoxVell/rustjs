@@ -4,7 +4,7 @@ use std::{cell::RefCell, cell::RefMut, rc::Rc};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Environment {
-    parent: Option<Box<Environment>>,
+    parent: Option<Rc<RefCell<Environment>>>,
     variables: HashMap<String, JsValue>,
 }
 
@@ -18,16 +18,19 @@ impl Default for Environment {
 }
 
 impl Environment {
-    pub fn new(parent: Box<Environment>) -> Self {
+    pub fn new(parent: Rc<RefCell<Environment>>) -> Self {
         Self {
             parent: Some(parent),
             ..Default::default()
         }
     }
 
-    pub fn get_parent(&mut self) -> Option<Environment> {
-        std::mem::replace(&mut self.parent, None).map(|x| *x)
-        //        self.parent.map(|x| *x)
+    pub fn print_variables(&self) {
+        println!("{:?}", self.variables);
+    }
+
+    pub fn get_parent(&mut self) -> Option<Rc<RefCell<Environment>>> {
+        std::mem::replace(&mut self.parent, None)
     }
 
     pub fn define_variable(&mut self, variable_name: String, value: JsValue) -> Result<(), String> {
@@ -46,6 +49,15 @@ impl Environment {
     }
 
     pub fn assign_variable(&mut self, variable_name: String, value: JsValue) -> Result<(), String> {
+        if self.variables.contains_key(&variable_name) {
+            self.variables.insert(variable_name.clone(), value);
+            return Ok(());
+        }
+
+        if let Some(parent) = &self.parent {
+            return parent.borrow_mut().assign_variable(variable_name, value);
+        }
+
         if !self.variables.contains_key(&variable_name) {
             return Err(format!("Error with name {variable_name} is not defined"));
         }
@@ -57,14 +69,14 @@ impl Environment {
     }
 
     pub fn get_variable_value(&self, variable_name: &str) -> Option<JsValue> {
-        // println!("get_variable_value {} {:#?}", variable_name, self.variables);
+//         println!("get_variable_value {} {:#?}", variable_name, self.variables);
         if self.variables.contains_key(variable_name) {
             return self.variables.get(variable_name).map(|x| x.clone());
         } else {
             return self
                 .parent
                 .as_ref()
-                .map(|parent_env| parent_env.get_variable_value(variable_name))?;
+                .map(|parent_env| parent_env.borrow().get_variable_value(variable_name))?;
         }
     }
 }

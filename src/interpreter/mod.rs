@@ -15,14 +15,14 @@ pub struct Interpreter {
 impl Interpreter {
     pub fn eval_node(&mut self, node: &NodeKind) -> Result<Option<JsValue>, String> {
         match node {
-            NodeKind::StringLiteral(value) => Ok(Some(JsValue::String(value.to_string()))),
+            NodeKind::StringLiteral(node) => Ok(Some(JsValue::String(node.value.to_string()))),
             NodeKind::NumberLiteral(value) => Ok(Some(JsValue::Number(*value))),
             NodeKind::NullLiteral => Ok(Some(JsValue::Null)),
             NodeKind::UndefinedLiteral => Ok(Some(JsValue::Undefined)),
             NodeKind::BooleanLiteral(value) => Ok(Some(JsValue::Boolean(*value))),
             NodeKind::VariableDeclaration(node) => match self.eval_variable_declaration(node) {
                 Ok(_) => Ok(None),
-                Err(error) => Err(error.clone()),
+                Err(error) => Err(error),
             },
             NodeKind::BinaryExpression(node) => match self.eval_binary_expression(node) {
                 Ok(value) => Ok(Some(value)),
@@ -32,7 +32,7 @@ impl Interpreter {
                 Ok(value) => Ok(value),
                 Err(error) => Err(error),
             },
-            NodeKind::BlockStatement(node) => match self.eval_statements(&node.statements) {
+            NodeKind::BlockStatement(node) => match self.eval_block_statement(&node) {
                 Ok(value) => Ok(value),
                 Err(error) => Err(error),
             },
@@ -57,6 +57,9 @@ impl Interpreter {
             NodeKind::FunctionDeclaration(node) => {
                 Ok(Some(self.eval_function_declaration(node).unwrap()))
             }
+            NodeKind::FunctionExpression(node) => {
+                Ok(Some(self.eval_function_expression(node).unwrap()))
+            }
             NodeKind::CallExpression(node) => Ok(Some(self.eval_call_expression(node).unwrap())),
             NodeKind::ForStatement(node) => {
                 self.eval_for_statement(node);
@@ -64,29 +67,38 @@ impl Interpreter {
             }
             NodeKind::ReturnStatement(node) => self.eval_return_statement(node).map(|x| Some(x)),
             NodeKind::ConditionalExpression(node) => {
-                self.eval_conditional_expression(node).map(|x| Some(x))
+                return self.eval_conditional_expression(node).map(|x| Some(x));
             }
             NodeKind::ClassDeclaration(node) => self.eval_class_declaration(node).map(|x| Some(x)),
             NodeKind::ObjectExpression(node) => self.eval_object_expression(node).map(|x| Some(x)),
             NodeKind::MemberExpression(node) => self.eval_member_expression(node).map(|x| Some(x)),
+            NodeKind::NewExpression(node) => self.eval_new_expression(node).map(|x| Some(x)),
+            NodeKind::ThisExpression => Ok(self.eval_this_expression()),
             _ => todo!(),
         }
     }
 
+    fn eval_this_expression(&mut self) -> Option<JsValue> {
+        return self.environment.get_variable_value("this");
+    }
+
+    fn eval_new_expression(&mut self, node: &NewExpressionNode) -> Result<JsValue, String> {
+        unimplemented!()
+    }
+
+    fn eval_block_statement(
+        &mut self,
+        node: &BlockStatementNode,
+    ) -> Result<Option<JsValue>, String> {
+        let block_environment = self.create_new_environment();
+        self.environment = block_environment;
+        let result = self.eval_statements(&node.statements);
+        self.pop_environment();
+        return result;
+    }
+
     fn eval_member_expression(&mut self, node: &MemberExpressionNode) -> Result<JsValue, String> {
-        //        let evaluated_key = self.eval_node(&node.property.node)?;
-
-        //        println!("evaluated_key {:#?}", evaluated_key);
-        //
-        // let evaluated_key = self.eval_node(&node.property.node)?.unwrap();
-        //
-        // let key = match evaluated_key {
-        //     JsValue::String(value) => value.clone(),
-        //     JsValue::Number(value) => value.to_string(),
-        // };
-        //
-        let property_key = self.eval_member_expression_key(&node)?;
-
+        let property_key = self.eval_member_expression_key(&node.property.node, node.computed)?;
         let resolved_object = self.eval_node(&node.object.node)?;
 
         if let Some(JsValue::Object(object)) = resolved_object {
@@ -96,19 +108,15 @@ impl Interpreter {
         } else {
             return Err("Is not an object".to_string());
         }
-
-        unimplemented!()
     }
 
     fn eval_member_expression_key(
         &mut self,
-        node: &MemberExpressionNode,
+        node: &NodeKind,
+        computed: bool,
     ) -> Result<String, String> {
-        println!("eval_member_expression_key: {:?}", node);
-        if node.computed {
-            let computed_key = self.eval_node(&node.property.as_ref().node)?.unwrap();
-
-            println!("Computed: {}", computed_key);
+        if computed {
+            let computed_key = self.eval_node(&node)?.unwrap();
 
             return match computed_key {
                 JsValue::String(value) => Ok(value),
@@ -116,26 +124,26 @@ impl Interpreter {
                 _ => Err("".to_string()),
             };
         } else {
-            if let NodeKind::Identifier(node) = &node.property.as_ref().node {
-                return Ok(node.id.clone());
-            } else {
-                return Err("Object key should be an identifier".to_string());
-            }
+            return match node {
+                NodeKind::StringLiteral(value) => Ok(value.value.clone()),
+                NodeKind::NumberLiteral(value) => Ok(value.to_string()),
+                NodeKind::Identifier(node) => Ok(node.id.clone()),
+                _ => Err("Object key should be an identifier".to_string()),
+            };
+            //            if let NodeKind::Identifier(node) = &node {
+            //                return Ok(node.id.clone());
+            //            } else {
+            //                return Err("Object key should be an identifier".to_string());
+            //            }
         }
-
-        unimplemented!()
     }
 
     fn eval_object_expression(&mut self, node: &ObjectExpressionNode) -> Result<JsValue, String> {
-        let mut object_value = JsObject {
-            properties: HashMap::new(),
-        };
+        let mut object_value = JsObject::new_empty();
 
         for property in &node.properties {
-            object_value.add_property(
-                &property.key.id,
-                self.eval_node(&property.value.node).unwrap().unwrap(),
-            );
+            let key = self.eval_member_expression_key(&property.key.node, property.computed)?;
+            object_value.add_property(&key, self.eval_node(&property.value.node)?.unwrap());
         }
 
         return Ok(JsValue::Object(Rc::new(RefCell::new(object_value))));
@@ -149,34 +157,6 @@ impl Interpreter {
         for class_method in &node.methods {}
 
         unimplemented!()
-
-        //        for fn_arg_node in &node.pa {
-        //            let default_value = fn_arg_node
-        //                .default_value
-        //                .as_ref()
-        //                .map(|node| self.eval_node(&node.as_ref().node).unwrap())
-        //                .flatten()
-        //                .unwrap_or(JsValue::Undefined);
-        //
-        //            arguments.push(JsFunctionArg {
-        //                name: fn_arg_node.name.clone(),
-        //                default_value,
-        //            });
-        //        }
-        //
-        //        let js_function_value = JsValue::Function(JsFunction {
-        //            name: node.name.id.clone(),
-        //            arguments,
-        //            environment: Box::new(self.environment.clone()),
-        //            body: Box::new(node.body.node.clone()),
-        //        });
-        //
-        //        println!("{:?}", js_function_value);
-        //
-        //        self.environment
-        //            .define_variable(node.name.id.clone(), js_function_value.clone())?;
-        //
-        //        return Ok(js_function_value);
     }
 
     fn eval_conditional_expression(
@@ -185,15 +165,15 @@ impl Interpreter {
     ) -> Result<JsValue, String> {
         let test = self.eval_node(&node.test.node)?.unwrap();
 
-        if test.to_bool() {
-            return self
-                .eval_node(&node.consequent.node)
-                .map(|x| x.unwrap_or(JsValue::Undefined));
+        let branch = if test.to_bool() {
+            &node.consequent.node
         } else {
-            return self
-                .eval_node(&node.alternative.node)
-                .map(|x| x.unwrap_or(JsValue::Undefined));
-        }
+            &node.alternative.node
+        };
+
+        return self
+            .eval_node(branch)
+            .map(|x| x.unwrap_or(JsValue::Undefined));
     }
 
     fn eval_return_statement(&mut self, node: &ReturnStatementNode) -> Result<JsValue, String> {
@@ -202,6 +182,8 @@ impl Interpreter {
     }
 
     fn eval_for_statement(&mut self, node: &ForStatementNode) {
+        self.environment = self.create_new_environment();
+
         if node.init.is_some() {
             self.eval_node(&node.init.as_ref().unwrap().node).unwrap();
         }
@@ -217,13 +199,23 @@ impl Interpreter {
                 .unwrap()
                 .unwrap();
         }
+
+        self.pop_environment();
     }
 
     fn eval_call_expression(&mut self, node: &CallExpressionNode) -> Result<JsValue, String> {
         let callee = self.eval_node(&node.callee.node)?;
 
+        println!("eval_call_expression: {:?}", node.callee.node);
+
         if let Some(JsValue::Function(function)) = &callee {
             let mut function_execution_environment = self.create_new_environment();
+
+            if let NodeKind::MemberExpression(expr) = &node.callee.node {
+                function_execution_environment.define_variable("this".to_string(), self.eval_node(&expr.object.node).unwrap().unwrap());
+                function_execution_environment.print_variables();
+            }
+
             function
                 .arguments
                 .iter()
@@ -251,20 +243,30 @@ impl Interpreter {
     }
 
     fn create_new_environment(&self) -> Environment {
-        return Environment::new(Box::new(self.environment.clone()));
+        return Environment::new(Rc::new(RefCell::new(self.environment.clone())));
     }
 
     fn pop_environment(&mut self) {
-        self.environment = self.environment.get_parent().unwrap();
+        self.environment = self.environment.get_parent().unwrap().borrow().clone();
+    }
+
+    fn eval_function_expression(&mut self, node: &FunctionExpressionNode) -> Result<JsValue, String> {
+        return Ok(self.create_js_function(&node.arguments, *node.body.clone()));
     }
 
     fn eval_function_declaration(
         &mut self,
         node: &FunctionDeclarationNode,
     ) -> Result<JsValue, String> {
+        let js_function_value = self.create_js_function(&node.arguments, *node.body.clone());
+        self.environment.define_variable(node.name.id.clone(), js_function_value.clone())?;
+        return Ok(js_function_value);
+    }
+
+    fn create_js_function(&mut self, function_arguments: &Vec<FunctionArgument>, body: Node) -> JsValue {
         let mut arguments = vec![];
 
-        for fn_arg_node in &node.arguments {
+        for fn_arg_node in function_arguments {
             let default_value = fn_arg_node
                 .default_value
                 .as_ref()
@@ -278,19 +280,12 @@ impl Interpreter {
             });
         }
 
-        let js_function_value = JsValue::Function(JsFunction {
-            name: node.name.id.clone(),
+        return JsValue::Function(JsFunction {
+            //            name: node.name.id.clone(),
             arguments,
             environment: Box::new(self.environment.clone()),
-            body: Box::new(node.body.node.clone()),
+            body: Box::new(body.node.clone()),
         });
-
-        println!("{:?}", js_function_value);
-
-        self.environment
-            .define_variable(node.name.id.clone(), js_function_value.clone())?;
-
-        return Ok(js_function_value);
     }
 
     fn eval_assignment_expression(
@@ -342,7 +337,8 @@ impl Interpreter {
                 if let JsValue::Object(object_value) = object {
                     let mut object = object_value;
 
-                    let key = self.eval_member_expression_key(&node)?;
+                    let key =
+                        self.eval_member_expression_key(&node.property.node, node.computed)?;
 
                     object
                         .borrow_mut()
@@ -616,6 +612,11 @@ impl Interpreter {
                 result_string.push_str(right_string.as_str());
                 return Ok(JsValue::String(result_string));
             }
+            (JsValue::String(left_string), JsValue::Number(right_number)) => {
+                let mut result_string = left_string.clone();
+                result_string.push_str(right_number.to_string().as_str());
+                return Ok(JsValue::String(result_string));
+            }
             (JsValue::Number(left_number), JsValue::Number(right_number)) => {
                 Ok(JsValue::Number(left_number + right_number))
             }
@@ -632,5 +633,212 @@ impl Default for Interpreter {
     fn default() -> Self {
         let env = Environment::default();
         Self { environment: env }
+    }
+}
+
+trait Visitor {
+    fn visit(&self) -> Box<dyn Iterator<Item = &NodeKind> + '_>;
+}
+
+impl Visitor for Node {
+    fn visit(&self) -> Box<dyn Iterator<Item = &NodeKind> + '_> {
+//        println!("visit {:?}", self.node);
+        match &self.node {
+            NodeKind::ProgramStatement(node) => Box::new(
+                node.statements
+                    .iter()
+                    .map(|x| {
+                        x.visit()
+                    })
+                    .flatten(),
+            ),
+            NodeKind::StringLiteral(_)
+            | NodeKind::NumberLiteral(_)
+            | NodeKind::BooleanLiteral(_)
+            | NodeKind::NullLiteral
+            | NodeKind::UndefinedLiteral
+            | NodeKind::ThisExpression
+            | NodeKind::Identifier(_) => Box::new(iter::once(&self.node).into_iter()),
+            NodeKind::BinaryExpression(node) => Box::new(
+                iter::once(&node.left.as_ref().node).chain(iter::once(&node.right.as_ref().node)),
+            ),
+            NodeKind::VariableDeclaration(_) => todo!(),
+            NodeKind::AssignmentExpression(_) => todo!(),
+            NodeKind::BlockStatement(node) => {
+                return Box::new(
+                    node.statements
+                    .iter()
+                    .map(|x| {
+                        x.visit()
+                    })
+                    .flatten(),
+            )
+            },
+            NodeKind::IfStatement(node) => {
+                //                let b: impl Iterator<Item = &NodeKind> + '_ = iter::empty::<&NodeKind>().into();
+
+//                let a = &node
+//                    .else_branch
+//                    .map(|x| x.visit());
+//
+//                let b = if let Some(n) = a {
+//                    n
+//                } else {
+//                    Box::new(iter::empty())
+//                }.into_iter();
+
+//                let c = iter::once(&node.condition.node).chain(b);
+
+//                let a = node.condition.visit().chain(iter::empty()).into_iter();
+//                let mut a = node.then_branch.visit();
+//
+//                let b = a.chain(Box::new(vec![].into_iter()));
+//                return b.into_iter();
+                unimplemented!()
+
+//                return b;
+//                return node.then_branch.visit();
+
+            }
+            NodeKind::PrintStatement(_) => todo!(),
+            NodeKind::WhileStatement(_) => todo!(),
+            NodeKind::ForStatement(_) => todo!(),
+            NodeKind::FunctionDeclaration(_) => todo!(),
+            NodeKind::ReturnStatement(_) => todo!(),
+            NodeKind::CallExpression(_) => todo!(),
+            NodeKind::ConditionalExpression(_) => todo!(),
+            NodeKind::MemberExpression(_) => todo!(),
+            NodeKind::ClassDeclaration(_) => todo!(),
+            NodeKind::NewExpression(_) => todo!(),
+            NodeKind::ObjectProperty(_) => todo!(),
+            NodeKind::ObjectExpression(_) => todo!(),
+            NodeKind::FunctionExpression(_) => todo!(),
+        }
+    }
+}
+
+impl Visitor for NodeKind {
+    fn visit(&self) -> Box<dyn Iterator<Item = &NodeKind> + '_> {
+        match self {
+            NodeKind::ProgramStatement(node) => node.visit(),
+            NodeKind::StringLiteral(_) => todo!(),
+            NodeKind::NumberLiteral(_) => todo!(),
+            NodeKind::BooleanLiteral(_) => todo!(),
+            NodeKind::NullLiteral => todo!(),
+            NodeKind::UndefinedLiteral => todo!(),
+            NodeKind::ThisExpression => todo!(),
+            NodeKind::Identifier(_) => todo!(),
+            NodeKind::BinaryExpression(_) => todo!(),
+            NodeKind::VariableDeclaration(_) => todo!(),
+            NodeKind::AssignmentExpression(_) => todo!(),
+            NodeKind::BlockStatement(_) => todo!(),
+            NodeKind::IfStatement(_) => todo!(),
+            NodeKind::PrintStatement(_) => todo!(),
+            NodeKind::WhileStatement(_) => todo!(),
+            NodeKind::ForStatement(_) => todo!(),
+            NodeKind::FunctionDeclaration(_) => todo!(),
+            NodeKind::ReturnStatement(_) => todo!(),
+            NodeKind::CallExpression(_) => todo!(),
+            NodeKind::ConditionalExpression(_) => todo!(),
+            NodeKind::MemberExpression(_) => todo!(),
+            NodeKind::ClassDeclaration(_) => todo!(),
+            NodeKind::NewExpression(_) => todo!(),
+            NodeKind::ObjectProperty(_) => todo!(),
+            NodeKind::ObjectExpression(_) => todo!(),
+            NodeKind::FunctionExpression(_) => todo!(),
+        }
+    }
+}
+
+use std::iter;
+
+impl Visitor for IfStatementNode {
+    fn visit(&self) -> Box<dyn Iterator<Item = &NodeKind> + '_> {
+        //        let a = self.condition.node.visit();
+        //        let a: dyn Iterator<Item = &NodeKind> + '_ = &self.else_branch.map_or(iter::empty::<_>().into_iter(), |x| x.node.visit().as_ref());
+
+        let c: Box<dyn Iterator<Item = &NodeKind> + '_> = Box::new(
+            self.condition
+                .node
+                .visit()
+                .chain(self.then_branch.node.visit().chain(iter::empty())),
+        );
+        return c;
+        //        todo!()
+    }
+}
+
+//impl Visitor for StringLiteralNode {
+//    fn visit(&self) ->Box<dyn Iterator<Item = &NodeKind> + '_> {
+//        return Box::new(iter::once(NodeKind::StringLiteral(self.clone())).into_iter().into_iter());
+//
+//        todo!()
+//    }
+//}
+
+//impl Visitor for f64 {
+//    fn visit(&self) ->Box<dyn Iterator<Item = &NodeKind> + '_> {
+//        Box::new(iter::once(&self).into_iter())
+//    }
+//}
+
+//impl Visitor for bool {
+//    fn visit(&self) ->Box<dyn Iterator<Item = &NodeKind> + '_> {
+//        Box::new(iter::once(&NodeKind::BooleanLiteral(*self)).into_iter())
+//    }
+//}
+
+impl Visitor for ProgramNode {
+    fn visit(&self) -> Box<dyn Iterator<Item = &NodeKind> + '_> {
+        Box::new(self.statements.iter().map(|x| x.node.visit()).flatten())
+    }
+}
+
+//impl Visitor for ProgramNode {
+//    fn visit(&self) {
+//        self.statements.iter().for_each(|node| node.node.visit());
+//    }
+//}
+
+//impl Visitor for IdentifierNode {
+//    fn visit(&self) {
+//        self
+//    }
+//}
+
+pub fn walk(node: &Node) {
+    node.visit().for_each(|x| println!("{:?}", x));
+}
+
+enum NodeTest {
+    A(A),
+    B(B),
+    C(Vec<B>),
+}
+
+struct A {
+    b: Box<NodeTest>,
+}
+
+struct B {
+    c: Box<NodeTest>,
+    d: Box<NodeTest>,
+}
+
+//impl Iterator for A {
+//    type Item = NodeTest;
+//
+//    fn next(&mut self) -> Option<Self::Item> {
+//        let a = self.b.as_ref().into_iter();
+//
+////        self.b.as_ref().into_iter()
+//    }
+//}
+
+impl Iterator for &NodeTest {
+    type Item = NodeTest;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        todo!()
     }
 }

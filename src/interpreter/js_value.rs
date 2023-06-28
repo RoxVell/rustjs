@@ -38,19 +38,19 @@ impl JsObject {
     }
 
     pub fn add_property(&mut self, key: &str, value: JsValue) {
-        println!("add_property {key} {value:?}");
+//        println!("add_property {key} {value:?}");
         self.properties.insert(key.to_string(), value);
     }
 
     pub fn get_value_property(&self, key: &str) -> JsValue {
-        println!("get_value_property {key} {:#?}", self.properties);
+//        println!("get_value_property {key} {:#?}", self.properties);
         return self.properties.get(key).map_or(JsValue::Undefined, |x| x.clone());
     }
 }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct JsFunction {
-    pub name: String,
+//    pub name: String,
     pub arguments: Vec<JsFunctionArg>,
     pub body: Box<NodeKind>,
     pub environment: Box<Environment>,
@@ -99,7 +99,7 @@ impl Display for JsValue {
             JsValue::String(str) => write!(f, "\x1b[93m\"{}\"\x1b[0m", str),
             JsValue::Number(number) => write!(f, "\x1b[36m{}\x1b[0m", number),
             JsValue::Boolean(value) => write!(f, "{}", if *value { "true" } else { "false" }),
-            JsValue::Function(js_function) => write!(f, "[function {}]", js_function.name),
+            JsValue::Function(js_function) => write!(f, "[function]"),
             JsValue::Object(_) => write!(f, "[object Object]"),
         }
     }

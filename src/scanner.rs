@@ -512,7 +512,7 @@ impl Scanner {
         }
 
         while let Some(char) = chars.next() {
-            if !char.is_alphanumeric() {
+            if !char.is_alphanumeric() && char != '_' {
                 break;
             }
 
