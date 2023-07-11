@@ -59,7 +59,6 @@ impl Parser {
             }
             Some(Token::IfKeyword) => self.parse_if_statement(),
             Some(Token::OpenBrace) => self.parse_block_statement(),
-            Some(Token::PrintKeyword) => self.parse_print_statement(),
             Some(Token::WhileKeyword) => self.parse_while_statement(),
             Some(Token::FunctionKeyword) => self.parse_function_declaration(),
             Some(Token::ReturnKeyword) => self.parse_return_statement(),
@@ -241,20 +240,6 @@ impl Parser {
             NodeKind::WhileStatement(WhileStatementNode {
                 condition: Box::new(condition),
                 body: Box::new(body),
-            }),
-            start_span,
-        ));
-    }
-
-    fn parse_print_statement(&mut self) -> Result<Node, String> {
-        let start_span = self.get_start_span();
-        self.eat(&Token::PrintKeyword);
-
-        let expression = self.parse_expression_statement().unwrap();
-
-        return Ok(self.consume(
-            NodeKind::PrintStatement(PrintStatementNode {
-                expression: Box::new(expression),
             }),
             start_span,
         ));
@@ -539,7 +524,6 @@ impl Parser {
     }
 
     fn parse_primary_expression(&mut self) -> Result<Node, String> {
-        println!("parse_primary_expression {:?}", self.get_current_token());
         match self.get_current_token() {
             Some(Token::ClassKeyword) => return self.parse_class_expression(),
             Some(Token::FunctionKeyword) => return self.parse_function_expression(),
@@ -731,13 +715,10 @@ impl Parser {
     fn parse_call_signature(&mut self, start_span: Span) -> Result<Node, String> {
         let literal = self.parse_member_expression()?;
 
-        println!("parse_call_signature {:?}", literal);
-
         if self.is_callee(&literal.node) {
             if let Some(Token::OpenParen) = self.get_current_token() {
                 self.eat(&Token::OpenParen);
-                let params =
-                    self.parse_comma_sequence(&Token::CloseParen, &Self::parse_expression)?;
+                let params = self.parse_comma_sequence(&Token::CloseParen, &Self::parse_expression)?;
                 self.eat(&Token::CloseParen);
                 return Ok(self.consume(
                     NodeKind::CallExpression(CallExpressionNode {
@@ -753,7 +734,6 @@ impl Parser {
     }
 
     fn is_callee(&mut self, node: &NodeKind) -> bool {
-        println!("is_callee {:?}", node);
         match node {
             NodeKind::Identifier(_) | NodeKind::MemberExpression(_) | NodeKind::ThisExpression | NodeKind::FunctionExpression(_) => true,
             _ => false,
@@ -778,7 +758,6 @@ impl Parser {
     fn parse_paranthesised_expression(&mut self) -> Result<Node, String> {
         self.eat(&Token::OpenParen);
         let expression = self.parse_expression();
-        println!("parse_paranthesised_expression: {expression:?}");
         self.eat(&Token::CloseParen);
         return expression;
     }
@@ -818,7 +797,7 @@ impl Parser {
             return Ok(self.consume(NodeKind::StringLiteral(StringLiteralNode { value: str }), start_span));
         }
 
-        unreachable!()
+        return Err(format!("Expected string, but got: {}", self.get_current_token().unwrap().to_keyword()));
     }
 
     fn parse_number_literal(&mut self) -> Result<Node, String> {
@@ -829,7 +808,7 @@ impl Parser {
             return Ok(self.consume(NodeKind::NumberLiteral(number), start_span));
         }
 
-        unreachable!()
+        return Err(format!("Expected number, but got: {}", self.get_current_token().unwrap().to_keyword()));
     }
 
     fn next_token(&mut self) {

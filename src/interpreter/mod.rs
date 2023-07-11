@@ -5,8 +5,9 @@ mod environment;
 use ariadne::{Label, Report, ReportKind, Source};
 pub use environment::Environment;
 mod js_value;
-pub use js_value::{create_js_object, JsFunction, JsFunctionArg, JsObject, JsValue};
+pub use js_value::*;
 use std::collections::HashMap;
+use std::fmt::format;
 
 pub struct Interpreter {
     environment: Environment,
@@ -36,13 +37,9 @@ impl Interpreter {
                 Ok(value) => Ok(value),
                 Err(error) => Err(error),
             },
-            NodeKind::Identifier(node) => Ok(Some(self.eval_identifier(node).unwrap())),
+            NodeKind::Identifier(node) => Ok(Some(self.eval_identifier(node)?)),
             NodeKind::IfStatement(node) => {
-                self.eval_if_statement(node).unwrap();
-                return Ok(None);
-            }
-            NodeKind::PrintStatement(node) => {
-                self.eval_print_statement(node);
+                self.eval_if_statement(node)?;
                 return Ok(None);
             }
             NodeKind::AssignmentExpression(node) => {
@@ -55,12 +52,12 @@ impl Interpreter {
                 return Ok(None);
             }
             NodeKind::FunctionDeclaration(node) => {
-                Ok(Some(self.eval_function_declaration(node).unwrap()))
+                Ok(Some(self.eval_function_declaration(node)?))
             }
             NodeKind::FunctionExpression(node) => {
                 Ok(Some(self.eval_function_expression(node).unwrap()))
             }
-            NodeKind::CallExpression(node) => Ok(Some(self.eval_call_expression(node).unwrap())),
+            NodeKind::CallExpression(node) => Ok(Some(self.eval_call_expression(node)?)),
             NodeKind::ForStatement(node) => {
                 self.eval_for_statement(node);
                 return Ok(None);
@@ -206,34 +203,48 @@ impl Interpreter {
     fn eval_call_expression(&mut self, node: &CallExpressionNode) -> Result<JsValue, String> {
         let callee = self.eval_node(&node.callee.node)?;
 
-        println!("eval_call_expression: {:?}", node.callee.node);
-
         if let Some(JsValue::Function(function)) = &callee {
             let mut function_execution_environment = self.create_new_environment();
 
             if let NodeKind::MemberExpression(expr) = &node.callee.node {
                 function_execution_environment.define_variable("this".to_string(), self.eval_node(&expr.object.node).unwrap().unwrap());
-                function_execution_environment.print_variables();
+                // function_execution_environment.print_variables();
             }
 
-            function
-                .arguments
-                .iter()
-                .zip(&node.params)
-                .for_each(|(arg, node)| {
-                    function_execution_environment
-                        .define_variable(
-                            arg.name.clone(),
-                            self.eval_node(&node.node)
+            let values: Vec<JsValue> = node.params.iter().map(|param| {
+                return self.eval_node(&param.node).unwrap().unwrap_or(JsValue::Undefined);
+            }).collect();
+
+            match function {
+                Func::Js(function) => {
+                    function
+                        .arguments
+                        .iter()
+                        .zip(&node.params)
+                        .for_each(|(arg, node)| {
+                            let value = self.eval_node(&node.node)
                                 .unwrap()
-                                .unwrap_or(JsValue::Undefined),
-                        )
-                        .unwrap();
-                });
-            self.environment = function_execution_environment;
-            let result = self.eval_node(function.body.as_ref());
-            self.pop_environment();
-            return result.map(|x| x.unwrap_or(JsValue::Undefined));
+                                .unwrap_or(JsValue::Undefined);
+
+                            function_execution_environment
+                                .define_variable(
+                                    arg.name.clone(),
+                                    value,
+                                )
+                                .unwrap();
+                        });
+                    self.environment = function_execution_environment;
+                    let result = function.call(self, &values);
+                    self.pop_environment();
+                    return result;
+                }
+                Func::Native(function) => {
+                    self.environment = function_execution_environment;
+                    let result = function.call(self, &values);
+                    self.pop_environment();
+                    return result;
+                }
+            }
         } else {
             return Err(format!(
                 "{} is not callable",
@@ -280,12 +291,11 @@ impl Interpreter {
             });
         }
 
-        return JsValue::Function(JsFunction {
-            //            name: node.name.id.clone(),
+        return JsValue::Function(Func::Js(JsFunction {
             arguments,
             environment: Box::new(self.environment.clone()),
             body: Box::new(body.node.clone()),
-        });
+        }));
     }
 
     fn eval_assignment_expression(
@@ -326,9 +336,7 @@ impl Interpreter {
                 }
                 .unwrap();
 
-                self.environment
-                    .assign_variable(id_node.id.clone(), new_variable_value.clone())
-                    .unwrap();
+                self.environment.assign_variable(id_node.id.clone(), new_variable_value.clone())?;
                 return Ok(new_variable_value);
             }
             NodeKind::MemberExpression(node) => {
@@ -384,15 +392,6 @@ impl Interpreter {
         }
     }
 
-    fn eval_print_statement(&mut self, node: &PrintStatementNode) {
-        let result = self.eval_node(&node.expression.node).unwrap();
-
-        match result {
-            Some(value) => println!("{}", value),
-            None => println!("{}", JsValue::Undefined),
-        }
-    }
-
     fn eval_if_statement(&mut self, node: &IfStatementNode) -> Result<(), String> {
         let condition_value = self
             .eval_node(&node.condition.node)
@@ -415,7 +414,7 @@ impl Interpreter {
         return self
             .environment
             .get_variable_value(&node.id)
-            .ok_or("Variable not found".to_string());
+            .ok_or(format!("Variable \"{}\" not found", node.id));
     }
 
     fn eval_variable_declaration(&mut self, node: &VariableDeclarationNode) -> Result<(), String> {
@@ -629,9 +628,29 @@ impl Interpreter {
     }
 }
 
+fn get_global_environment() -> Environment {
+    fn console_log(interpreter: &mut Interpreter, arguments: &Vec<JsValue>) -> Result<JsValue, String> {
+        let result = arguments.iter()
+            .map(|arg| format!("{}", arg))
+            .collect::<Vec<String>>()
+            .join(" ");
+        println!("{result}");
+        return Ok(JsValue::Undefined);
+    }
+
+    Environment::new_with_variables([
+        ("console".to_string(), create_js_object(JsObject {
+            properties: HashMap::from([
+                ("log".to_string(), create_native_function(console_log))
+            ]),
+            prototype: None
+        }))
+    ])
+}
+
 impl Default for Interpreter {
     fn default() -> Self {
-        let env = Environment::default();
+        let env = get_global_environment();
         Self { environment: env }
     }
 }
@@ -700,7 +719,6 @@ impl Visitor for Node {
 //                return node.then_branch.visit();
 
             }
-            NodeKind::PrintStatement(_) => todo!(),
             NodeKind::WhileStatement(_) => todo!(),
             NodeKind::ForStatement(_) => todo!(),
             NodeKind::FunctionDeclaration(_) => todo!(),
@@ -733,7 +751,6 @@ impl Visitor for NodeKind {
             NodeKind::AssignmentExpression(_) => todo!(),
             NodeKind::BlockStatement(_) => todo!(),
             NodeKind::IfStatement(_) => todo!(),
-            NodeKind::PrintStatement(_) => todo!(),
             NodeKind::WhileStatement(_) => todo!(),
             NodeKind::ForStatement(_) => todo!(),
             NodeKind::FunctionDeclaration(_) => todo!(),
@@ -751,6 +768,8 @@ impl Visitor for NodeKind {
 }
 
 use std::iter;
+use crate::interpreter::js_value::NativeFunction;
+use crate::interpreter::JsValue::Function;
 
 impl Visitor for IfStatementNode {
     fn visit(&self) -> Box<dyn Iterator<Item = &NodeKind> + '_> {

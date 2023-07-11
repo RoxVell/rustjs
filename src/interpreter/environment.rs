@@ -25,6 +25,13 @@ impl Environment {
         }
     }
 
+    pub fn new_with_variables<T: Into<HashMap<String, JsValue>>>(variables: T) -> Self {
+        Self {
+            parent: None,
+            variables: variables.into()
+        }
+    }
+
     pub fn print_variables(&self) {
         println!("{:?}", self.variables);
     }
@@ -40,10 +47,10 @@ impl Environment {
 
         self.variables.insert(variable_name.clone(), value.clone());
 
-        //        println!(
-        //            "Defined new variable {} = {:?} Variables: {:?}",
-        //            variable_name, value, self.variables
-        //        );
+        // println!(
+        //     "Defined new variable {} = {:#?} Variables: {:#?} Parent: {:#?}",
+        //     variable_name, value, self.variables, self.parent
+        // );
 
         return Ok(());
     }
@@ -59,7 +66,7 @@ impl Environment {
         }
 
         if !self.variables.contains_key(&variable_name) {
-            return Err(format!("Error with name {variable_name} is not defined"));
+            return Err(format!("Variable \"{variable_name}\" is not defined"));
         }
 
         // TODO: throw an error while assigning value to constant

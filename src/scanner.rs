@@ -96,7 +96,6 @@ pub enum Token {
     ImportKeyword,
     StaticKeyword,
     SwitchKeyword,
-    PrintKeyword,
     ReturnKeyword,
 }
 
@@ -168,7 +167,6 @@ impl Token {
             Token::ImportKeyword => "null".to_string(),
             Token::StaticKeyword => "static".to_string(),
             Token::SwitchKeyword => "switch".to_string(),
-            Token::PrintKeyword => "print".to_string(),
             Token::ReturnKeyword => "return".to_string(),
             Token::LessThan => "<".to_string(),
             Token::LessThanOrEqual => "<=".to_string(),
@@ -554,7 +552,6 @@ impl Scanner {
             ("false", Token::Boolean("false".to_string())),
             ("null", Token::Null),
             ("undefined", Token::Undefined),
-            ("print", Token::PrintKeyword),
         ]);
 
         let identifier = &self.source_code[self.current_pos..=cursor];

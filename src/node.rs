@@ -16,7 +16,6 @@ pub enum NodeKind {
     AssignmentExpression(AssignmentExpressionNode),
     BlockStatement(BlockStatementNode),
     IfStatement(IfStatementNode),
-    PrintStatement(PrintStatementNode),
     WhileStatement(WhileStatementNode),
     ForStatement(ForStatementNode),
     FunctionDeclaration(FunctionDeclarationNode),
@@ -191,11 +190,6 @@ impl TryFrom<&Token> for AssignmentOperator {
 pub struct WhileStatementNode {
     pub condition: Box<Node>,
     pub body: Box<Node>,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct PrintStatementNode {
-    pub expression: Box<Node>,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -388,9 +382,6 @@ impl FormatNode for NodeKind {
                 let else_branch = format!("else {}", node.else_branch.format());
 
                 return format!("if ({condition}) {then_branch} {else_branch}");
-            }
-            NodeKind::PrintStatement(_) => {
-                unimplemented!()
             }
             NodeKind::WhileStatement(_) => {
                 unimplemented!()
