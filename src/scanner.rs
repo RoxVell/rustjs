@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 use std::fmt::Display;
-use std::str::Chars;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Token {

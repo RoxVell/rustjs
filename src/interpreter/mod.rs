@@ -1,22 +1,23 @@
-use std::{cell::RefCell, cell::RefMut, rc::Rc};
+use std::{cell::RefCell, rc::Rc};
 
 use crate::node::*;
 mod environment;
-use ariadne::{Label, Report, ReportKind, Source};
+
 pub use environment::Environment;
 mod js_value;
 pub use js_value::*;
 use std::collections::HashMap;
-use std::fmt::format;
+
+const CONSTRUCTOR_METHOD_NAME: &'static str = "constructor";
 
 pub struct Interpreter {
-    environment: Environment,
+    environment: RefCell<Environment>,
 }
 
 impl Interpreter {
-    pub fn eval_node(&mut self, node: &NodeKind) -> Result<Option<JsValue>, String> {
+    pub fn eval_node(&self, node: &NodeKind) -> Result<Option<JsValue>, String> {
         match node {
-            NodeKind::StringLiteral(node) => Ok(Some(JsValue::String(node.value.to_string()))),
+            NodeKind::StringLiteral(node) => Ok(Some(JsValue::String(node.value.clone()))),
             NodeKind::NumberLiteral(value) => Ok(Some(JsValue::Number(*value))),
             NodeKind::NullLiteral => Ok(Some(JsValue::Null)),
             NodeKind::UndefinedLiteral => Ok(Some(JsValue::Undefined)),
@@ -75,26 +76,27 @@ impl Interpreter {
         }
     }
 
-    fn eval_this_expression(&mut self) -> Option<JsValue> {
-        return self.environment.get_variable_value("this");
+    fn eval_this_expression(&self) -> Option<JsValue> {
+        return self.environment.borrow().get_variable_value("this");
     }
 
-    fn eval_new_expression(&mut self, node: &NewExpressionNode) -> Result<JsValue, String> {
+    fn eval_new_expression(&self, node: &NewExpressionNode) -> Result<JsValue, String> {
         unimplemented!()
     }
 
     fn eval_block_statement(
-        &mut self,
+        &self,
         node: &BlockStatementNode,
     ) -> Result<Option<JsValue>, String> {
         let block_environment = self.create_new_environment();
-        self.environment = block_environment;
+        self.set_environment(block_environment);
+//        self.environment = RefCell::new(block_environment);
         let result = self.eval_statements(&node.statements);
         self.pop_environment();
         return result;
     }
 
-    fn eval_member_expression(&mut self, node: &MemberExpressionNode) -> Result<JsValue, String> {
+    fn eval_member_expression(&self, node: &MemberExpressionNode) -> Result<JsValue, String> {
         let property_key = self.eval_member_expression_key(&node.property.node, node.computed)?;
         let resolved_object = self.eval_node(&node.object.node)?;
 
@@ -108,7 +110,7 @@ impl Interpreter {
     }
 
     fn eval_member_expression_key(
-        &mut self,
+        &self,
         node: &NodeKind,
         computed: bool,
     ) -> Result<String, String> {
@@ -135,7 +137,7 @@ impl Interpreter {
         }
     }
 
-    fn eval_object_expression(&mut self, node: &ObjectExpressionNode) -> Result<JsValue, String> {
+    fn eval_object_expression(&self, node: &ObjectExpressionNode) -> Result<JsValue, String> {
         let mut object_value = JsObject::new_empty();
 
         for property in &node.properties {
@@ -146,18 +148,82 @@ impl Interpreter {
         return Ok(JsValue::Object(Rc::new(RefCell::new(object_value))));
     }
 
-    fn eval_object_property(&mut self, node: &ObjectPropertyNode) -> Result<JsValue, String> {
+    fn eval_object_property(&self, node: &ObjectPropertyNode) -> Result<JsValue, String> {
         return self.eval_node(&node.value.node).map(|x| x.unwrap());
     }
 
-    fn eval_class_declaration(&mut self, node: &ClassDeclarationNode) -> Result<JsValue, String> {
-        for class_method in &node.methods {}
+    /// In js a class is a function that gets `this` as variable when called with new keyword
+    /// To do this we need:
+    ///     1. construct a function from a constructor method
+    ///     2. construct an object with class methods (prototype) excluding a "constructor" method
+    ///
+    /// For example:
+    /// class A {
+    ///   some_field = 5;
+    ///
+    ///   constructor(a, b = 10) {
+    ///     this.a = a;
+    ///     this.b = b;
+    ///   }
+    ///
+    ///   getA() {
+    ///     return this.a;
+    ///   }
+    ///
+    ///   setB(newValue) {
+    ///     this.b = newValue;
+    ///   }
+    /// }
+    ///
+    fn eval_class_declaration(&self, node: &ClassDeclarationNode) -> Result<JsValue, String> {
+        let prototype_object = self.build_prototype_object_from_class_declaration(node);
+        let function = self.build_function_from_class_declaration(node);
+        // function
+        println!("{:#?}", prototype_object);
 
         unimplemented!()
     }
 
+    fn build_function_from_class_declaration(&self, node: &ClassDeclarationNode) -> JsValue {
+        let constructor_method = node.methods.iter().find(|x| {
+            if let NodeKind::FunctionDeclaration(method_declaration) = &x.node {
+                return method_declaration.name.id == CONSTRUCTOR_METHOD_NAME;
+            }
+
+            return false;
+        });
+
+        if constructor_method.is_some() {
+            if let NodeKind::FunctionDeclaration(method_declaration) = &constructor_method.unwrap().as_ref().node {
+                return self.eval_function_declaration(method_declaration).unwrap();
+            }
+
+            unreachable!()
+        } else {
+            create_empty_function_as_js_value()
+        }
+    }
+
+    fn build_prototype_object_from_class_declaration(&self, node: &ClassDeclarationNode) -> JsValue {
+        let mut prototype_object = JsObject::new_empty();
+
+        for class_method in &node.methods {
+            if let NodeKind::FunctionDeclaration(method_declaration) = &class_method.node {
+                // if method_declaration.name.id == CONSTRUCTOR_METHOD_NAME { continue; }
+
+                let function = self.eval_function_declaration(&method_declaration).unwrap();
+
+                if let IdentifierNode { id } = method_declaration.name.as_ref() {
+                    prototype_object.add_property(id.as_str(), function);
+                }
+            }
+        }
+
+        create_js_object(prototype_object)
+    }
+
     fn eval_conditional_expression(
-        &mut self,
+        &self,
         node: &ConditionalExpressionNode,
     ) -> Result<JsValue, String> {
         let test = self.eval_node(&node.test.node)?.unwrap();
@@ -173,13 +239,17 @@ impl Interpreter {
             .map(|x| x.unwrap_or(JsValue::Undefined));
     }
 
-    fn eval_return_statement(&mut self, node: &ReturnStatementNode) -> Result<JsValue, String> {
+    fn eval_return_statement(&self, node: &ReturnStatementNode) -> Result<JsValue, String> {
         self.eval_node(&node.expression.node)
             .map(|x| x.unwrap_or(JsValue::Undefined))
     }
 
-    fn eval_for_statement(&mut self, node: &ForStatementNode) {
-        self.environment = self.create_new_environment();
+    fn set_environment(&self, environment: Environment) {
+        self.environment.replace(environment);
+    }
+
+    fn eval_for_statement(&self, node: &ForStatementNode) {
+        self.set_environment(self.create_new_environment());
 
         if node.init.is_some() {
             self.eval_node(&node.init.as_ref().unwrap().node).unwrap();
@@ -200,7 +270,7 @@ impl Interpreter {
         self.pop_environment();
     }
 
-    fn eval_call_expression(&mut self, node: &CallExpressionNode) -> Result<JsValue, String> {
+    fn eval_call_expression(&self, node: &CallExpressionNode) -> Result<JsValue, String> {
         let callee = self.eval_node(&node.callee.node)?;
 
         if let Some(JsValue::Function(function)) = &callee {
@@ -233,13 +303,13 @@ impl Interpreter {
                                 )
                                 .unwrap();
                         });
-                    self.environment = function_execution_environment;
+                    self.set_environment(function_execution_environment);
                     let result = function.call(self, &values);
                     self.pop_environment();
                     return result;
                 }
                 Func::Native(function) => {
-                    self.environment = function_execution_environment;
+                    self.set_environment(function_execution_environment);
                     let result = function.call(self, &values);
                     self.pop_environment();
                     return result;
@@ -254,27 +324,32 @@ impl Interpreter {
     }
 
     fn create_new_environment(&self) -> Environment {
-        return Environment::new(Rc::new(RefCell::new(self.environment.clone())));
+        return Environment::new(Rc::new(self.environment.clone()));
     }
 
-    fn pop_environment(&mut self) {
-        self.environment = self.environment.get_parent().unwrap().borrow().clone();
+    fn pop_environment(&self) {
+        let parent_environment = self.environment.borrow_mut().get_parent().unwrap().borrow().clone();
+        self.set_environment(parent_environment);
     }
 
-    fn eval_function_expression(&mut self, node: &FunctionExpressionNode) -> Result<JsValue, String> {
+    fn eval_function_expression(&self, node: &FunctionExpressionNode) -> Result<JsValue, String> {
         return Ok(self.create_js_function(&node.arguments, *node.body.clone()));
     }
 
+//    fn get_js_function_from_function_declaration_node(&self, node: &FunctionDeclarationNode,) -> JsValue {
+//        return self.create_js_function(&node.arguments, *node.body.clone());
+//    }
+
     fn eval_function_declaration(
-        &mut self,
+        &self,
         node: &FunctionDeclarationNode,
     ) -> Result<JsValue, String> {
         let js_function_value = self.create_js_function(&node.arguments, *node.body.clone());
-        self.environment.define_variable(node.name.id.clone(), js_function_value.clone())?;
+        self.environment.borrow_mut().define_variable(node.name.id.clone(), js_function_value.clone())?;
         return Ok(js_function_value);
     }
 
-    fn create_js_function(&mut self, function_arguments: &Vec<FunctionArgument>, body: Node) -> JsValue {
+    fn create_js_function(&self, function_arguments: &Vec<FunctionArgument>, body: Node) -> JsValue {
         let mut arguments = vec![];
 
         for fn_arg_node in function_arguments {
@@ -293,13 +368,13 @@ impl Interpreter {
 
         return JsValue::Function(Func::Js(JsFunction {
             arguments,
-            environment: Box::new(self.environment.clone()),
+            environment: Box::new(self.environment.borrow().clone()),
             body: Box::new(body.node.clone()),
         }));
     }
 
     fn eval_assignment_expression(
-        &mut self,
+        &self,
         node: &AssignmentExpressionNode,
     ) -> Result<JsValue, String> {
         let right_hand_value = self.eval_node(&node.right.node).unwrap().unwrap();
@@ -309,34 +384,34 @@ impl Interpreter {
                 let new_variable_value = match node.operator {
                     AssignmentOperator::AddEqual => {
                         let original_value =
-                            self.environment.get_variable_value(&id_node.id).unwrap();
+                            self.environment.borrow().get_variable_value(&id_node.id).unwrap();
                         self.add(&original_value, &right_hand_value)
                     }
                     AssignmentOperator::SubEqual => {
                         let original_value =
-                            self.environment.get_variable_value(&id_node.id).unwrap();
+                            self.environment.borrow().get_variable_value(&id_node.id).unwrap();
                         self.sub(&original_value, &right_hand_value)
                     }
                     AssignmentOperator::DivEqual => {
                         let original_value =
-                            self.environment.get_variable_value(&id_node.id).unwrap();
+                            self.environment.borrow().get_variable_value(&id_node.id).unwrap();
                         self.div(&original_value, &right_hand_value)
                     }
                     AssignmentOperator::MulEqual => {
                         let original_value =
-                            self.environment.get_variable_value(&id_node.id).unwrap();
+                            self.environment.borrow().get_variable_value(&id_node.id).unwrap();
                         self.mul(&original_value, &right_hand_value)
                     }
                     AssignmentOperator::ExponentiationEqual => {
                         let original_value =
-                            self.environment.get_variable_value(&id_node.id).unwrap();
+                            self.environment.borrow().get_variable_value(&id_node.id).unwrap();
                         self.exponentiation(&original_value, &right_hand_value)
                     }
                     AssignmentOperator::Equal => Ok(right_hand_value),
                 }
                 .unwrap();
 
-                self.environment.assign_variable(id_node.id.clone(), new_variable_value.clone())?;
+                self.environment.borrow_mut().assign_variable(id_node.id.clone(), new_variable_value.clone())?;
                 return Ok(new_variable_value);
             }
             NodeKind::MemberExpression(node) => {
@@ -363,7 +438,7 @@ impl Interpreter {
         }
     }
 
-    fn get_member_expression_key(&mut self, node: &Node) -> Result<String, String> {
+    fn get_member_expression_key(&self, node: &Node) -> Result<String, String> {
         match &node.node {
             NodeKind::Identifier(node) => Ok(node.id.clone()),
             node => {
@@ -381,7 +456,7 @@ impl Interpreter {
         }
     }
 
-    fn eval_while_statement(&mut self, node: &WhileStatementNode) {
+    fn eval_while_statement(&self, node: &WhileStatementNode) {
         while self
             .eval_node(&node.condition.node)
             .unwrap()
@@ -392,7 +467,7 @@ impl Interpreter {
         }
     }
 
-    fn eval_if_statement(&mut self, node: &IfStatementNode) -> Result<(), String> {
+    fn eval_if_statement(&self, node: &IfStatementNode) -> Result<(), String> {
         let condition_value = self
             .eval_node(&node.condition.node)
             .expect("Error during evaluation of condition of 'if statement'")
@@ -413,11 +488,12 @@ impl Interpreter {
         // println!("eval_identifier {:#?}", node);
         return self
             .environment
+            .borrow()
             .get_variable_value(&node.id)
             .ok_or(format!("Variable \"{}\" not found", node.id));
     }
 
-    fn eval_variable_declaration(&mut self, node: &VariableDeclarationNode) -> Result<(), String> {
+    fn eval_variable_declaration(&self, node: &VariableDeclarationNode) -> Result<(), String> {
         let value = if let Some(value) = &node.value {
             self.eval_node(&value.as_ref().node)
                 .expect("Error during variable value evaluation")
@@ -425,10 +501,10 @@ impl Interpreter {
         } else {
             JsValue::Undefined
         };
-        return self.environment.define_variable(node.id.clone(), value);
+        return self.environment.borrow_mut().define_variable(node.id.clone(), value);
     }
 
-    fn eval_binary_expression(&mut self, node: &BinaryExpressionNode) -> Result<JsValue, String> {
+    fn eval_binary_expression(&self, node: &BinaryExpressionNode) -> Result<JsValue, String> {
         let evaluated_left_node = self
             .eval_node(&node.left.node)
             .expect("Left expression evaluation error")
@@ -525,21 +601,21 @@ impl Interpreter {
         }
     }
 
-    fn logical_or(&mut self, left: &JsValue, right: &JsValue) -> Result<JsValue, String> {
+    fn logical_or(&self, left: &JsValue, right: &JsValue) -> Result<JsValue, String> {
         if left.to_bool() {
             return Ok(left.clone());
         }
         return Ok(right.clone());
     }
 
-    fn logical_and(&mut self, left: &JsValue, right: &JsValue) -> Result<JsValue, String> {
+    fn logical_and(&self, left: &JsValue, right: &JsValue) -> Result<JsValue, String> {
         if !left.to_bool() {
             return Ok(left.clone());
         }
         return Ok(right.clone());
     }
 
-    fn eval_statements(&mut self, statements: &Vec<Node>) -> Result<Option<JsValue>, String> {
+    fn eval_statements(&self, statements: &Vec<Node>) -> Result<Option<JsValue>, String> {
         let mut result: Option<JsValue> = None;
 
         for statement in statements {
@@ -547,19 +623,6 @@ impl Interpreter {
         }
 
         return Ok(result);
-    }
-
-    fn div(&self, left: &JsValue, right: &JsValue) -> Result<JsValue, String> {
-        match (left, right) {
-            (JsValue::Number(left_number), JsValue::Number(right_number)) => {
-                Ok(JsValue::Number(left_number / right_number))
-            }
-            _ => Err(format!(
-                "division of types '{}' and '{}' is not possible",
-                left.get_type_as_str(),
-                right.get_type_as_str()
-            )),
-        }
     }
 
     fn exponentiation(&self, left: &JsValue, right: &JsValue) -> Result<JsValue, String> {
@@ -575,61 +638,25 @@ impl Interpreter {
         }
     }
 
+    fn div(&self, left: &JsValue, right: &JsValue) -> Result<JsValue, String> {
+        left / right
+    }
+
     fn mul(&self, left: &JsValue, right: &JsValue) -> Result<JsValue, String> {
-        match (left, right) {
-            (JsValue::String(string), JsValue::Number(number)) => {
-                Ok(JsValue::String(string.repeat(*number as usize)))
-            }
-            (JsValue::Number(left_number), JsValue::Number(right_number)) => {
-                Ok(JsValue::Number(left_number * right_number))
-            }
-            _ => Err(format!(
-                "multiplication of types '{}' and '{}' is not possible",
-                left.get_type_as_str(),
-                right.get_type_as_str()
-            )),
-        }
+        left * right
     }
 
     fn sub(&self, left: &JsValue, right: &JsValue) -> Result<JsValue, String> {
-        match (left, right) {
-            (JsValue::Number(left_number), JsValue::Number(right_number)) => {
-                Ok(JsValue::Number(left_number - right_number))
-            }
-            _ => Err(format!(
-                "subtraction of types '{}' and '{}' is not possible",
-                left.get_type_as_str(),
-                right.get_type_as_str()
-            )),
-        }
+        left - right
     }
 
     fn add(&self, left: &JsValue, right: &JsValue) -> Result<JsValue, String> {
-        match (left, right) {
-            (JsValue::String(left_string), JsValue::String(right_string)) => {
-                let mut result_string = left_string.clone();
-                result_string.push_str(right_string.as_str());
-                return Ok(JsValue::String(result_string));
-            }
-            (JsValue::String(left_string), JsValue::Number(right_number)) => {
-                let mut result_string = left_string.clone();
-                result_string.push_str(right_number.to_string().as_str());
-                return Ok(JsValue::String(result_string));
-            }
-            (JsValue::Number(left_number), JsValue::Number(right_number)) => {
-                Ok(JsValue::Number(left_number + right_number))
-            }
-            _ => Err(format!(
-                "addition of types '{}' and '{}' is not possible",
-                left.get_type_as_str(),
-                right.get_type_as_str()
-            )),
-        }
+        left + right
     }
 }
 
 fn get_global_environment() -> Environment {
-    fn console_log(interpreter: &mut Interpreter, arguments: &Vec<JsValue>) -> Result<JsValue, String> {
+    fn console_log(interpreter: &Interpreter, arguments: &Vec<JsValue>) -> Result<JsValue, String> {
         let result = arguments.iter()
             .map(|arg| format!("{}", arg))
             .collect::<Vec<String>>()
@@ -638,20 +665,48 @@ fn get_global_environment() -> Environment {
         return Ok(JsValue::Undefined);
     }
 
+    fn set_prototype(interpreter: &Interpreter, arguments: &Vec<JsValue>) -> Result<JsValue, String> {
+        let target = arguments.get(0).expect("Expected first argument to be a target");
+
+        if let JsValue::Object(target_obj) = target {
+            let prototype = arguments.get(1).expect("Expected second argument to be a prototype");
+            if let JsValue::Object(prototype_obj) = prototype {
+                target_obj.borrow_mut().set_prototype(prototype_obj.borrow().clone());
+            } else {
+                return Err(format!("Second arguments should be of type object, but got: {}", target.get_type_as_str()));
+            }
+        } else {
+            return Err(format!("First arguments should be of type object, but got: {}", target.get_type_as_str()));
+        }
+
+        return Ok(JsValue::Undefined);
+    }
+
+    fn performance_now(interpreter: &Interpreter, arguments: &Vec<JsValue>) -> Result<JsValue, String> {
+        return Ok(JsValue::Number(SystemTime::now().duration_since(SystemTime::UNIX_EPOCH).unwrap().as_millis() as f64));
+    }
+
     Environment::new_with_variables([
         ("console".to_string(), create_js_object(JsObject {
             properties: HashMap::from([
                 ("log".to_string(), create_native_function(console_log))
             ]),
             prototype: None
-        }))
+        })),
+        ("setPrototype".to_string(), create_native_function(set_prototype)),
+        ("performance".to_string(), create_js_object(JsObject {
+            properties: HashMap::from([
+                ("now".to_string(), create_native_function(performance_now))
+            ]),
+            prototype: None
+        })),
     ])
 }
 
 impl Default for Interpreter {
     fn default() -> Self {
         let env = get_global_environment();
-        Self { environment: env }
+        Self { environment: RefCell::new(env) }
     }
 }
 
@@ -768,6 +823,7 @@ impl Visitor for NodeKind {
 }
 
 use std::iter;
+use std::time::SystemTime;
 use crate::interpreter::js_value::NativeFunction;
 use crate::interpreter::JsValue::Function;
 

@@ -1,12 +1,9 @@
 use std::fmt::{Debug, Display, Formatter};
-use std::str::FromStr;
-use crate::node::NodeKind;
+use crate::node::{BlockStatementNode, NodeKind};
 use super::environment::Environment;
 use std::collections::HashMap;
-use std::{cell::RefCell, rc::Rc, cell::RefMut};
+use std::{cell::RefCell, rc::Rc, ops};
 use crate::interpreter::Interpreter;
-use crate::parser;
-use crate::node;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum JsValue {
@@ -29,6 +26,89 @@ pub struct JsObject {
     pub prototype: Option<Box<JsObject>>,
 }
 
+impl From<f64> for JsValue {
+    fn from(value: f64) -> Self {
+        JsValue::Number(value)
+    }
+}
+
+impl From<bool> for JsValue {
+    fn from(value: bool) -> Self {
+        JsValue::Boolean(value)
+    }
+}
+
+impl From<String> for JsValue {
+    fn from(value: String) -> Self {
+        JsValue::String(value)
+    }
+}
+
+impl ops::Add<&JsValue> for &JsValue {
+    type Output = Result<JsValue, String>;
+
+    fn add(self, rhs: &JsValue) -> Self::Output {
+        match (self, rhs) {
+            (JsValue::Number(first_number), JsValue::Number(second_number)) => Ok(JsValue::Number(first_number + second_number)),
+            (JsValue::String(first_string), JsValue::String(second_string)) => Ok(JsValue::String(format!("{}{}", first_string, second_string.as_str()))),
+            (JsValue::String(left_string), JsValue::Number(right_number)) => {
+                Ok(JsValue::String(format!("{}{}", left_string, right_number.to_string())))
+            }
+            _ => Err(format!(
+                "addition of types '{}' and '{}' is not possible",
+                &self.get_type_as_str(),
+                &rhs.get_type_as_str()
+            ))
+        }
+    }
+}
+
+impl ops::Sub<&JsValue> for &JsValue {
+    type Output = Result<JsValue, String>;
+
+    fn sub(self, rhs: &JsValue) -> Self::Output {
+        match (self, rhs) {
+            (JsValue::Number(first_number), JsValue::Number(second_number)) => Ok(JsValue::Number(first_number - second_number)),
+            _ => Err(format!(
+                "subtraction of types '{}' and '{}' is not possible",
+                &self.get_type_as_str(),
+                &rhs.get_type_as_str()
+            ))
+        }
+    }
+}
+
+impl ops::Mul<&JsValue> for &JsValue {
+    type Output = Result<JsValue, String>;
+
+    fn mul(self, rhs: &JsValue) -> Self::Output {
+        match (self, rhs) {
+            (JsValue::Number(first_number), JsValue::Number(second_number)) => Ok(JsValue::Number(first_number * second_number)),
+            (JsValue::String(string), JsValue::Number(number)) => Ok(JsValue::String(string.repeat(*number as usize))),
+            _ => Err(format!(
+                "multiplication of types '{}' and '{}' is not possible",
+                &self.get_type_as_str(),
+                &rhs.get_type_as_str()
+            ))
+        }
+    }
+}
+
+impl ops::Div<&JsValue> for &JsValue {
+    type Output = Result<JsValue, String>;
+
+    fn div(self, rhs: &JsValue) -> Self::Output {
+        match (self, rhs) {
+            (JsValue::Number(first_number), JsValue::Number(second_number)) => Ok(JsValue::Number(first_number / second_number)),
+            _ => Err(format!(
+                "division of types '{}' and '{}' is not possible",
+                &self.get_type_as_str(),
+                &rhs.get_type_as_str()
+            ))
+        }
+    }
+}
+
 impl JsObject {
     pub fn new_empty() -> Self {
         Self {
@@ -44,14 +124,26 @@ impl JsObject {
         }
     }
 
+    pub fn set_prototype(&mut self, prototype: JsObject) {
+        self.prototype = Some(Box::new(prototype));
+    }
+
     pub fn add_property(&mut self, key: &str, value: JsValue) {
 //        println!("add_property {key} {value:?}");
         self.properties.insert(key.to_string(), value);
     }
 
     pub fn get_value_property(&self, key: &str) -> JsValue {
-//        println!("get_value_property {key} {:#?}", self.properties);
-        return self.properties.get(key).map_or(JsValue::Undefined, |x| x.clone());
+       // println!("get_value_property {key} {:#?} {:#?}", self.properties, self.prototype);
+        if self.properties.contains_key(key) {
+            return self.properties.get(key).map_or(JsValue::Undefined, |x| x.clone());
+        }
+
+        if self.prototype.is_some() {
+            return self.prototype.as_ref().unwrap().get_value_property(key);
+        }
+
+        return JsValue::Undefined;
     }
 }
 
@@ -62,15 +154,15 @@ pub enum Func {
 }
 
 pub trait Callable: Sized {
-    fn call(&self, interpreter: &mut Interpreter, arguments: &Vec<JsValue>) -> Result<JsValue, String>;
+    fn call(&self, interpreter: &Interpreter, arguments: &Vec<JsValue>) -> Result<JsValue, String>;
 }
 
 #[derive(Clone)]
 pub struct NativeFunction {
-    pub function: fn(&mut Interpreter, &Vec<JsValue>) -> Result<JsValue, String>,
+    pub function: fn(&Interpreter, &Vec<JsValue>) -> Result<JsValue, String>,
 }
 
-pub fn create_native_function(function: fn(&mut Interpreter, &Vec<JsValue>) -> Result<JsValue, String>) -> JsValue {
+pub fn create_native_function(function: fn(&Interpreter, &Vec<JsValue>) -> Result<JsValue, String>) -> JsValue {
     JsValue::Function(Func::Native(NativeFunction { function }))
 }
 
@@ -87,13 +179,13 @@ impl PartialEq for NativeFunction {
 }
 
 impl Callable for NativeFunction {
-    fn call(&self, interpreter: &mut Interpreter, arguments: &Vec<JsValue>) -> Result<JsValue, String> {
+    fn call(&self, interpreter: &Interpreter, arguments: &Vec<JsValue>) -> Result<JsValue, String> {
         (self.function)(interpreter, arguments)
     }
 }
 
 impl Callable for Func {
-    fn call(&self, interpreter: &mut Interpreter, arguments: &Vec<JsValue>) -> Result<JsValue, String> {
+    fn call(&self, interpreter: &Interpreter, arguments: &Vec<JsValue>) -> Result<JsValue, String> {
         match self {
             Func::Js(function) => function.call(interpreter, arguments),
             Func::Native(function) => function.call(interpreter, arguments)
@@ -102,7 +194,7 @@ impl Callable for Func {
 }
 
 impl Callable for JsFunction {
-    fn call(&self, interpreter: &mut Interpreter, value: &Vec<JsValue>) -> Result<JsValue, String> {
+    fn call(&self, interpreter: &Interpreter, value: &Vec<JsValue>) -> Result<JsValue, String> {
         let result = interpreter.eval_node(self.body.as_ref());
         return result.map(|x| x.unwrap_or(JsValue::Undefined));
     }
@@ -113,6 +205,24 @@ pub struct JsFunction {
     pub arguments: Vec<JsFunctionArg>,
     pub body: Box<NodeKind>,
     pub environment: Box<Environment>,
+}
+
+impl Into<JsValue> for JsFunction {
+    fn into(self) -> JsValue {
+        JsValue::Function(Func::Js(self))
+    }
+}
+
+pub fn create_empty_function_as_js_value() -> JsValue {
+    create_empty_function().into()
+}
+
+pub fn create_empty_function() -> JsFunction {
+    JsFunction {
+        arguments: vec![],
+        body: Box::new(NodeKind::BlockStatement(BlockStatementNode { statements: vec![] })),
+        environment: Box::new(Environment::default()),
+    }
 }
 
 // impl FromStr for JsFunction {

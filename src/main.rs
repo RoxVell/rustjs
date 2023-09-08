@@ -3,9 +3,8 @@ mod node;
 mod parser;
 mod scanner;
 use interpreter::*;
-use std::env;
 use std::fs;
-use std::{cell::RefCell, rc::Rc, cell::RefMut};
+use std::{cell::RefCell, rc::Rc};
 
 fn eval(code: &str, is_debug: bool) {
     println!("-----DEBUG (printing tokens)-----");
@@ -26,7 +25,7 @@ fn eval(code: &str, is_debug: bool) {
         .expect(format!("Error occured during parsing").as_str());
 
     if is_debug {
-        println!("{ast:#?}");
+        println!("{:#?}", ast);
     }
 
     let mut interpreter = Interpreter::default();

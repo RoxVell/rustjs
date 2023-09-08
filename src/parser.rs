@@ -1,6 +1,6 @@
 use crate::node::*;
 use crate::scanner::{Scanner, Span, Token, TokenWithLocation};
-use ariadne::{sources, ColorGenerator, Fmt, Label, Report, ReportKind, Source};
+use ariadne::{ColorGenerator, Label, Report, ReportKind, Source};
 
 pub struct Parser {
     prev_token: Option<TokenWithLocation>,

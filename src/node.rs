@@ -1,5 +1,6 @@
 use crate::scanner::{Span, Token};
 use std::fmt;
+use std::fmt::{Debug, Formatter};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum NodeKind {
@@ -47,9 +48,15 @@ impl TryFrom<Node> for ObjectPropertyNode {
 //    }
 //}
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub struct StringLiteralNode {
     pub value: String,
+}
+
+impl Debug for StringLiteralNode {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "\"{}\"", self.value)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -69,6 +76,12 @@ pub struct ObjectPropertyNode {
     pub key: Box<Node>,
     pub value: Box<Node>,
 }
+
+// impl Debug for ObjectPropertyNode {
+//     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+//         write!(f, "{}: {}", self.key, self.value)
+//     }
+// }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ClassDeclarationNode {
@@ -204,9 +217,15 @@ pub struct NumberLiteralNode {
     value: f64,
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub struct IdentifierNode {
     pub id: String,
+}
+
+impl Debug for IdentifierNode {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.id)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -279,11 +298,11 @@ pub struct VariableDeclarationNode {
 }
 
 trait FormatNode {
-    fn format(&self) -> String;
+    fn format(&self, ident: u8, level: u8) -> String;
 }
 
 impl FormatNode for BinaryOperator {
-    fn format(&self) -> String {
+    fn format(&self, _: u8, _: u8) -> String {
         match self {
             BinaryOperator::Add => "+".to_string(),
             BinaryOperator::Sub => "-".to_string(),
@@ -299,13 +318,13 @@ impl FormatNode for BinaryOperator {
             BinaryOperator::StrictEquality => "===".to_string(),
             BinaryOperator::Inequality => "!=".to_string(),
             BinaryOperator::StrictInequality => "!==".to_string(),
-            BinaryOperator::MulMul => todo!(),
+            BinaryOperator::MulMul => "**".to_string(),
         }
     }
 }
 
 impl FormatNode for VariableDeclarationKind {
-    fn format(&self) -> String {
+    fn format(&self, _: u8, _: u8) -> String {
         match self {
             VariableDeclarationKind::Let => "let".to_string(),
             VariableDeclarationKind::Const => "const".to_string(),
@@ -314,7 +333,7 @@ impl FormatNode for VariableDeclarationKind {
 }
 
 impl FormatNode for AssignmentOperator {
-    fn format(&self) -> String {
+    fn format(&self, _: u8, _: u8) -> String {
         match self {
             AssignmentOperator::AddEqual => "+=".to_string(),
             AssignmentOperator::SubEqual => "-=".to_string(),
@@ -327,19 +346,21 @@ impl FormatNode for AssignmentOperator {
 }
 
 impl FormatNode for Box<Node> {
-    fn format(&self) -> String {
-        self.as_ref().node.format()
+    fn format(&self, ident: u8, level: u8) -> String {
+        self.as_ref().node.format(ident, level)
     }
 }
 
 impl FormatNode for Option<Box<Node>> {
-    fn format(&self) -> String {
-        self.as_ref().map_or("".to_string(), |x| x.node.format())
+    fn format(&self, ident: u8, level: u8) -> String {
+        self.as_ref().map_or("".to_string(), |x| x.node.format(ident, level))
     }
 }
 
 impl FormatNode for NodeKind {
-    fn format(&self) -> String {
+    fn format(&self, ident: u8, level: u8) -> String {
+        let whitespaces = " ".repeat((ident * level) as usize);
+
         match self {
             NodeKind::StringLiteral(node) => format!("\'{}\'", node.value),
             NodeKind::NumberLiteral(value) => format!("{value}"),
@@ -348,108 +369,167 @@ impl FormatNode for NodeKind {
             NodeKind::UndefinedLiteral => "undefined".to_string(),
             NodeKind::Identifier(value) => format!("{}", value.id),
             NodeKind::BinaryExpression(node) => {
-                let left = node.left.node.format();
-                let right = node.right.node.format();
-                let operator = node.operator.format();
+                let left = node.left.node.format(ident, level);
+                let right = node.right.node.format(ident, level);
+                let operator = node.operator.format(ident, level);
 
                 return format!("{left} {operator} {right}");
             }
             NodeKind::VariableDeclaration(node) => {
-                let variable_kind = node.kind.format();
+                let variable_kind = node.kind.format(ident, level);
                 let variable_name = &node.id;
-                let variable_value = node.value.format();
+                let variable_value = node.value.format(ident, level);
                 return format!("{variable_kind} {variable_name} = {variable_value};");
             }
             NodeKind::AssignmentExpression(node) => {
-                let assignment_kind = &node.operator.format();
-                let left = node.left.format();
-                let right = node.right.format();
-                return format!("{left} {assignment_kind} = {right}");
+                let assignment_kind = &node.operator.format(ident, level);
+                let left = node.left.format(ident, level);
+                let right = node.right.format(ident, level);
+                return format!("{left} {assignment_kind} {right}");
             }
             NodeKind::BlockStatement(node) => {
-                let mut result = String::from("");
-                node.statements
+                let formatted_statements: Vec<String> = node.statements
                     .iter()
-                    .for_each(|x| result.push_str(x.node.format().as_str()));
-                return format!(
-                    "{{
-{result}\n}}"
-                );
+                    .map(|x| {
+                        let formatted_statement = x.node.format(ident, level);
+                        format!("{}{}", whitespaces, formatted_statement.as_str())
+                    })
+                    .collect();
+                let formatted_statements = formatted_statements.join("\n");
+                return format!("{{\n{formatted_statements}\n{}}}", " ".repeat((ident * (level - 1)) as usize));
             }
             NodeKind::IfStatement(node) => {
-                let condition = node.condition.as_ref().node.format();
-                let then_branch = node.then_branch.as_ref().node.format();
-                let else_branch = format!("else {}", node.else_branch.format());
+                let condition = node.condition.as_ref().node.format(ident, level);
+                let then_branch = node.then_branch.as_ref().node.format(ident, level);
+                let else_branch = format!("else {}", node.else_branch.format(ident, level));
 
                 return format!("if ({condition}) {then_branch} {else_branch}");
             }
-            NodeKind::WhileStatement(_) => {
-                unimplemented!()
+            NodeKind::WhileStatement(node) => {
+                let condition = node.condition.format(ident, level);
+                let body = node.body.format(ident, level);
+                return format!("while ({condition}) {body}");
             }
             NodeKind::ForStatement(node) => {
-                let init = node.init.format();
-                let test = node.test.format();
-                let update = node.update.format();
-                let body = node.body.format();
+                let init = node.init.format(ident, level);
+                let test = node.test.format(ident, level);
+                let update = node.update.format(ident, level);
+                let body = node.body.format(ident, level + 1);
                 return format!("for ({init} {test}; {update}) {body}");
             }
             NodeKind::FunctionDeclaration(node) => {
                 let function_name = &node.name.id;
-                let function_args = &node.arguments.iter().fold("".to_string(), |mut acc, a| {
+                let function_args = &node.arguments.iter().enumerate().fold("".to_string(), |mut acc, (i, a)| {
                     let argument_name = &a.name;
                     let argument_default_value = a
                         .default_value
                         .as_ref()
-                        .map_or("".to_string(), |x| format!(" = {}", x.node.format()));
-                    acc.push_str(format!("{argument_name}{argument_default_value}").as_str());
+                        .map_or("".to_string(), |x| format!(" = {}", x.node.format(ident, level)));
+                    let comma = if i != node.arguments.len() - 1 { ", " } else { "" };
+                    acc.push_str(format!("{argument_name}{argument_default_value}{}", comma).as_str());
                     return acc;
                 });
-                let function_body = &node.body.format();
-                return format!("function {function_name}({function_args}) {function_body}");
+                let function_body = &node.body.format(ident, level + 1);
+                return format!("{whitespaces}function {function_name}({function_args}) {function_body}\n");
             }
             NodeKind::ReturnStatement(node) => {
-                return format!("return {}", node.expression.node.format());
+                return format!("return {};", node.expression.node.format(ident, level));
             }
-            NodeKind::CallExpression(_) => {
-                unimplemented!()
+            NodeKind::CallExpression(node) => {
+                format!("{}({})", node.callee.format(ident, level), node.params.iter().map(|x| x.node.format(ident, level)).collect::<Vec<String>>().join(", "))
             }
             NodeKind::ProgramStatement(node) => {
                 let mut result = String::new();
                 node.statements
                     .iter()
-                    .for_each(|x| result.push_str(x.node.format().as_str()));
+                    .for_each(|x| result.push_str(x.node.format(ident, level).as_str()));
                 return result;
             }
-            NodeKind::ConditionalExpression(_) => {
-                unimplemented!()
+            NodeKind::ConditionalExpression(node) => {
+                let condition = node.test.format(ident, level);
+                let consequent = node.consequent.node.format(ident, level);
+                let alternative = node.alternative.node.format(ident, level);
+                return format!("{condition} ? {consequent} : {alternative}");
             }
-            NodeKind::MemberExpression(_) => todo!(),
-            NodeKind::ClassDeclaration(_) => todo!(),
+            NodeKind::MemberExpression(node) => {
+                let obj_str = node.object.format(ident, level);
+                let prop = node.property.format(ident, level);
+
+                if node.computed {
+                    format!("{}[{}]", obj_str, prop)
+                } else {
+                    format!("{}.{}", obj_str, prop)
+                }
+            },
+            NodeKind::ClassDeclaration(node) => {
+                let class_name = node.name.format(ident, level);
+                let parent_class = match &node.parent {
+                    Some(node) => {
+                        let parent_class_name = node.format(ident, level);
+                        format!(" extends {parent_class_name}")
+                    }
+                    None => "".to_string()
+                };
+                let class_body: Vec<String> = node.methods.iter().map(|x| {
+                    format!("{}{}", whitespaces, x.node.format(ident, level + 1))
+                }).collect();
+                let class_body = class_body.join("\n");
+                format!("class {class_name}{parent_class} {{\n{class_body}}}\n")
+            },
             NodeKind::ObjectProperty(_) => todo!(),
             NodeKind::ObjectExpression(_) => todo!(),
-            NodeKind::NewExpression(_) => "new".to_string(),
+            NodeKind::NewExpression(node) => {
+                let callee = node.callee.format(ident, level);
+                let arguments: Vec<String> = node.arguments.iter().map(|x| x.node.format(ident, level)).collect();
+                let arguments = arguments.join(", ");
+                format!("new {callee}({arguments})")
+            }
             NodeKind::ThisExpression => "this".to_string(),
             NodeKind::FunctionExpression(_) => todo!(),
         }
     }
 }
 
-fn format_ast(node: &NodeKind) -> String {
-    return node.format();
+pub fn format_ast(node: &NodeKind, ident: u8) -> String {
+    return node.format(ident, 0);
 }
 
-//#[cfg(test)]
-//mod test {
-//    use super::*;
-//    use crate::parser;
-//
-//    #[test]
-//    fn test_format_code() {
-//        let code = "function add(a = 1, b = 3) { return a + b; }";
-//
-//        let ast = parser::Parser::parse_code_to_ast(code)
-//          .expect("Error occured during parsing");
-//
-//        assert_eq!(format_ast(&ast), "if (true) 1 else 2");
-//    }
-//}
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::parser;
+
+    const IDENT: u8 = 2;
+
+    #[test]
+    fn test_format_code() {
+        let code = "function add(a=1,b=3){return a+b;}";
+
+        let ast = parser::Parser::parse_code_to_ast(code)
+          .expect("Error occured during parsing");
+
+        assert_eq!(format_ast(&ast.node, IDENT), "function add(a = 1, b = 3) {return a + b;}");
+    }
+
+    #[test]
+    fn few_levels() {
+        let code = "class User {
+  constructor(name, age) {
+    this.name = name;
+    this.age = age;
+  }
+
+  printUser() {
+    console.log(this.name, this.age);
+  }
+}
+
+let user = new User('Anton', 26)";
+
+        let ast = parser::Parser::parse_code_to_ast(code)
+            .expect("Error occured during parsing");
+
+        println!("{}", format_ast(&ast.node, IDENT));
+        assert_eq!(format_ast(&ast.node, IDENT), "function add(a = 1, b = 3) {return a + b;}");
+    }
+}

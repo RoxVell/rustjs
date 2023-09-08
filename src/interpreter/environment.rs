@@ -1,6 +1,6 @@
 use super::js_value::JsValue;
 use std::collections::HashMap;
-use std::{cell::RefCell, cell::RefMut, rc::Rc};
+use std::{cell::RefCell, rc::Rc};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Environment {
