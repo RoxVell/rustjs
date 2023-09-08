@@ -72,7 +72,8 @@ impl Interpreter {
             NodeKind::MemberExpression(node) => self.eval_member_expression(node).map(|x| Some(x)),
             NodeKind::NewExpression(node) => self.eval_new_expression(node).map(|x| Some(x)),
             NodeKind::ThisExpression => Ok(self.eval_this_expression()),
-            _ => todo!(),
+            NodeKind::ObjectProperty(_) => todo!(),
+            NodeKind::ExpressionStatement(node) => self.eval_node(&node.node),
         }
     }
 
@@ -786,6 +787,7 @@ impl Visitor for Node {
             NodeKind::ObjectProperty(_) => todo!(),
             NodeKind::ObjectExpression(_) => todo!(),
             NodeKind::FunctionExpression(_) => todo!(),
+            NodeKind::ExpressionStatement(_) => todo!(),
         }
     }
 }
@@ -818,6 +820,7 @@ impl Visitor for NodeKind {
             NodeKind::ObjectProperty(_) => todo!(),
             NodeKind::ObjectExpression(_) => todo!(),
             NodeKind::FunctionExpression(_) => todo!(),
+            NodeKind::ExpressionStatement(_) => todo!(),
         }
     }
 }

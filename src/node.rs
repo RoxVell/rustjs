@@ -29,6 +29,7 @@ pub enum NodeKind {
     NewExpression(NewExpressionNode),
     ObjectProperty(ObjectPropertyNode),
     ObjectExpression(ObjectExpressionNode),
+    ExpressionStatement(Box<Node>),
 }
 
 impl TryFrom<Node> for ObjectPropertyNode {
@@ -116,8 +117,8 @@ pub struct Node {
     pub end: Span,
 }
 
-impl fmt::Debug for Node {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl Debug for Node {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         write!(f, "{:?}", self.node)
     }
 }
@@ -486,6 +487,7 @@ impl FormatNode for NodeKind {
             }
             NodeKind::ThisExpression => "this".to_string(),
             NodeKind::FunctionExpression(_) => todo!(),
+            NodeKind::ExpressionStatement(node) => format!("{};", node.format(ident, level))
         }
     }
 }

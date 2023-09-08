@@ -335,8 +335,14 @@ impl Parser {
     }
 
     fn parse_expression_statement(&mut self) -> Result<Node, String> {
+        let start_span = self.get_start_span();
         let expression = self.parse_expression();
-        self.eat_if_present(&Token::Semicolon);
+
+        if self.get_current_token().is_some() && self.is_current_token_matches(&Token::Semicolon) {
+            self.eat(&Token::Semicolon);
+            return Ok(self.consume(NodeKind::ExpressionStatement(Box::new(expression.unwrap())), start_span));
+        }
+
         return expression;
     }
 
@@ -874,9 +880,12 @@ impl Parser {
         }
     }
 
+    fn is_current_token_matches(&self, token_kind: &Token) -> bool {
+        self.current_token.is_some() && &self.current_token.as_ref().unwrap().token == token_kind
+    }
+
     fn eat_if_present(&mut self, token_kind: &Token) {
-        if self.current_token.is_some() && &self.current_token.as_ref().unwrap().token == token_kind
-        {
+        if self.is_current_token_matches(token_kind) {
             self.prev_token = self.current_token.clone();
             self.next_token();
         }

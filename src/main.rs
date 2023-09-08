@@ -28,7 +28,7 @@ fn eval(code: &str, is_debug: bool) {
         println!("{:#?}", ast);
     }
 
-    let mut interpreter = Interpreter::default();
+    let interpreter = Interpreter::default();
     let result = interpreter
         .eval_node(&ast.node)
         .expect("Error during evaluating node");
@@ -62,7 +62,7 @@ fn eval_file(file_path: &str) {
 
 fn repl() {
     let mut parser = parser::Parser::default();
-    let mut interpreter = Interpreter::default();
+    let interpreter = Interpreter::default();
 
     let mut line = String::new();
 
@@ -83,7 +83,7 @@ fn repl() {
 }
 
 fn eval_code(code: &str) -> JsValue {
-    let mut interpreter = Interpreter::default();
+    let interpreter = Interpreter::default();
 
     let ast = parser::Parser::parse_code_to_ast(code)
         .expect(format!("Error occured during parsing").as_str());
