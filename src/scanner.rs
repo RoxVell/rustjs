@@ -1,8 +1,8 @@
 use std::collections::HashMap;
-use std::fmt::Display;
+use std::fmt::{Debug, Display, Formatter};
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum Token {
+pub enum TokenKind {
     // Literal
     String(String),
     Number(f64),
@@ -27,7 +27,7 @@ pub enum Token {
     MoreThan,
     MoreThanOrEqual,
 
-    // Arithemic operations
+    // Arithmetic operations
     Plus,
     PlusPlus,
     Minus,
@@ -98,98 +98,109 @@ pub enum Token {
     ReturnKeyword,
 }
 
-impl Token {
+impl TokenKind {
     pub fn to_keyword(&self) -> String {
         match self {
-            Token::String(value) => format!("{} (string)", value),
-            Token::Number(value) => format!("{} (number)", value),
-            Token::Boolean(value) => format!("{} (boolean)", value),
-            Token::Null => "null".to_string(),
-            Token::Undefined => "undefined".to_string(),
-            Token::Identifier(_) => "identifier".to_string(),
-            Token::Comment(_) => "null".to_string(),
-            Token::Or => "||".to_string(),
-            Token::And => "&&".to_string(),
-            Token::BitwiseOr => "|".to_string(),
-            Token::BitwiseAnd => "&".to_string(),
-            Token::Plus => "+".to_string(),
-            Token::PlusPlus => "++".to_string(),
-            Token::Minus => "--".to_string(),
-            Token::MinusMinus => "--".to_string(),
-            Token::Mul => "*".to_string(),
-            Token::MulMul => "**".to_string(),
-            Token::Div => "/".to_string(),
-            Token::Equal => "=".to_string(),
-            Token::Percent => "%".to_string(),
-            Token::PlusEqual => "+=".to_string(),
-            Token::MinusEqual => "-=".to_string(),
-            Token::MulEqual => "*=".to_string(),
-            Token::DivEqual => "/=".to_string(),
-            Token::PercentEqual => "%=".to_string(),
-            Token::MulMulEqual => "**=".to_string(),
-            Token::LSLSEqual => "<<=".to_string(),
-            Token::RSRSEqual => ">>=".to_string(),
-            Token::RSRSRSEqual => ">>>=".to_string(),
-            Token::OpenParen => "(".to_string(),
-            Token::CloseParen => ")".to_string(),
-            Token::OpenBrace => "{".to_string(),
-            Token::CloseBrace => "}".to_string(),
-            Token::Equality => "==".to_string(),
-            Token::StrictEquality => "===".to_string(),
-            Token::Inequality => "!=".to_string(),
-            Token::StrictInequality => "!==".to_string(),
-            Token::Comma => ",".to_string(),
-            Token::Semicolon => ";".to_string(),
-            Token::Dot => ".".to_string(),
-            Token::Exclamatory => "!".to_string(),
-            Token::FunctionKeyword => "function".to_string(),
-            Token::IfKeyword => "if".to_string(),
-            Token::ElseKeyword => "else".to_string(),
-            Token::WhileKeyword => "while".to_string(),
-            Token::DoKeyword => "do".to_string(),
-            Token::ForKeyword => "for".to_string(),
-            Token::InKeyword => "in".to_string(),
-            Token::ClassKeyword => "class".to_string(),
-            Token::ExtendsKeyword => "extends".to_string(),
-            Token::ConstKeyword => "const".to_string(),
-            Token::LetKeyword => "let".to_string(),
-            Token::ThisKeyword => "this".to_string(),
-            Token::TryKeyword => "try".to_string(),
-            Token::CatchKeyword => "catch".to_string(),
-            Token::NewKeyword => "new".to_string(),
-            Token::BreakKeyword => "break".to_string(),
-            Token::ContinueKeyword => "continue".to_string(),
-            Token::SuperKeyword => "super".to_string(),
-            Token::ThrowKeyword => "throw".to_string(),
-            Token::YieldKeyword => "yield".to_string(),
-            Token::ExportKeyword => "export".to_string(),
-            Token::ImportKeyword => "null".to_string(),
-            Token::StaticKeyword => "static".to_string(),
-            Token::SwitchKeyword => "switch".to_string(),
-            Token::ReturnKeyword => "return".to_string(),
-            Token::LessThan => "<".to_string(),
-            Token::LessThanOrEqual => "<=".to_string(),
-            Token::MoreThan => ">".to_string(),
-            Token::MoreThanOrEqual => ">=".to_string(),
-            Token::Question => "?".to_string(),
-            Token::Colon => ":".to_string(),
-            Token::OpenSquareBracket => "[".to_string(),
-            Token::CloseSquareBracket => "]".to_string(),
+            TokenKind::String(value) => format!("{} (string)", value),
+            TokenKind::Number(value) => format!("{} (number)", value),
+            TokenKind::Boolean(value) => format!("{} (boolean)", value),
+            TokenKind::Null => "null".to_string(),
+            TokenKind::Undefined => "undefined".to_string(),
+            TokenKind::Identifier(_) => "identifier".to_string(),
+            TokenKind::Comment(_) => "null".to_string(),
+            TokenKind::Or => "||".to_string(),
+            TokenKind::And => "&&".to_string(),
+            TokenKind::BitwiseOr => "|".to_string(),
+            TokenKind::BitwiseAnd => "&".to_string(),
+            TokenKind::Plus => "+".to_string(),
+            TokenKind::PlusPlus => "++".to_string(),
+            TokenKind::Minus => "--".to_string(),
+            TokenKind::MinusMinus => "--".to_string(),
+            TokenKind::Mul => "*".to_string(),
+            TokenKind::MulMul => "**".to_string(),
+            TokenKind::Div => "/".to_string(),
+            TokenKind::Equal => "=".to_string(),
+            TokenKind::Percent => "%".to_string(),
+            TokenKind::PlusEqual => "+=".to_string(),
+            TokenKind::MinusEqual => "-=".to_string(),
+            TokenKind::MulEqual => "*=".to_string(),
+            TokenKind::DivEqual => "/=".to_string(),
+            TokenKind::PercentEqual => "%=".to_string(),
+            TokenKind::MulMulEqual => "**=".to_string(),
+            TokenKind::LSLSEqual => "<<=".to_string(),
+            TokenKind::RSRSEqual => ">>=".to_string(),
+            TokenKind::RSRSRSEqual => ">>>=".to_string(),
+            TokenKind::OpenParen => "(".to_string(),
+            TokenKind::CloseParen => ")".to_string(),
+            TokenKind::OpenBrace => "{".to_string(),
+            TokenKind::CloseBrace => "}".to_string(),
+            TokenKind::Equality => "==".to_string(),
+            TokenKind::StrictEquality => "===".to_string(),
+            TokenKind::Inequality => "!=".to_string(),
+            TokenKind::StrictInequality => "!==".to_string(),
+            TokenKind::Comma => ",".to_string(),
+            TokenKind::Semicolon => ";".to_string(),
+            TokenKind::Dot => ".".to_string(),
+            TokenKind::Exclamatory => "!".to_string(),
+            TokenKind::FunctionKeyword => "function".to_string(),
+            TokenKind::IfKeyword => "if".to_string(),
+            TokenKind::ElseKeyword => "else".to_string(),
+            TokenKind::WhileKeyword => "while".to_string(),
+            TokenKind::DoKeyword => "do".to_string(),
+            TokenKind::ForKeyword => "for".to_string(),
+            TokenKind::InKeyword => "in".to_string(),
+            TokenKind::ClassKeyword => "class".to_string(),
+            TokenKind::ExtendsKeyword => "extends".to_string(),
+            TokenKind::ConstKeyword => "const".to_string(),
+            TokenKind::LetKeyword => "let".to_string(),
+            TokenKind::ThisKeyword => "this".to_string(),
+            TokenKind::TryKeyword => "try".to_string(),
+            TokenKind::CatchKeyword => "catch".to_string(),
+            TokenKind::NewKeyword => "new".to_string(),
+            TokenKind::BreakKeyword => "break".to_string(),
+            TokenKind::ContinueKeyword => "continue".to_string(),
+            TokenKind::SuperKeyword => "super".to_string(),
+            TokenKind::ThrowKeyword => "throw".to_string(),
+            TokenKind::YieldKeyword => "yield".to_string(),
+            TokenKind::ExportKeyword => "export".to_string(),
+            TokenKind::ImportKeyword => "null".to_string(),
+            TokenKind::StaticKeyword => "static".to_string(),
+            TokenKind::SwitchKeyword => "switch".to_string(),
+            TokenKind::ReturnKeyword => "return".to_string(),
+            TokenKind::LessThan => "<".to_string(),
+            TokenKind::LessThanOrEqual => "<=".to_string(),
+            TokenKind::MoreThan => ">".to_string(),
+            TokenKind::MoreThanOrEqual => ">=".to_string(),
+            TokenKind::Question => "?".to_string(),
+            TokenKind::Colon => ":".to_string(),
+            TokenKind::OpenSquareBracket => "[".to_string(),
+            TokenKind::CloseSquareBracket => "]".to_string(),
         }
     }
 }
 
-impl Display for Token {
+impl Display for TokenKind {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:?}", self)
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct TokenWithLocation {
-    pub token: Token,
+#[derive(Clone, Debug, PartialEq)]
+pub struct TextSpan {
     pub start: Span,
     pub end: Span,
+}
+
+#[derive(Clone, PartialEq)]
+pub struct Token {
+    pub token: TokenKind,
+    pub span: TextSpan,
+}
+
+impl Debug for Token {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Token").field("token", &self.token).finish()
+    }
 }
 
 #[derive(Debug, Copy, Clone, PartialEq)]
@@ -217,21 +228,23 @@ impl Scanner {
         }
     }
 
-    fn consume(&self, token: Token) -> TokenWithLocation {
-        TokenWithLocation {
+    fn consume(&self, token: TokenKind) -> Token {
+        Token {
             token,
-            start: Span {
-                line: self.prev_line,
-                row: self.prev_pos,
-            },
-            end: Span {
-                line: self.current_line,
-                row: self.current_pos,
+            span: TextSpan {
+                start: Span {
+                    line: self.prev_line,
+                    row: self.prev_pos,
+                },
+                end: Span {
+                    line: self.current_line,
+                    row: self.current_pos,
+                }
             },
         }
     }
 
-    pub fn next_token(&mut self) -> Option<TokenWithLocation> {
+    pub fn next_token(&mut self) -> Option<Token> {
         self.prev_line = self.current_line;
         self.prev_pos = self.current_pos;
         let mut cursor = self.current_pos;
@@ -253,17 +266,17 @@ impl Scanner {
         }
 
         let found_token = match current_char {
-            ',' => Some(Token::Comma),
-            ';' => Some(Token::Semicolon),
-            ':' => Some(Token::Colon),
-            '(' => Some(Token::OpenParen),
-            ')' => Some(Token::CloseParen),
-            '{' => Some(Token::OpenBrace),
-            '}' => Some(Token::CloseBrace),
-            '[' => Some(Token::OpenSquareBracket),
-            ']' => Some(Token::CloseSquareBracket),
-            '.' => Some(Token::Dot),
-            '?' => Some(Token::Question),
+            ',' => Some(TokenKind::Comma),
+            ';' => Some(TokenKind::Semicolon),
+            ':' => Some(TokenKind::Colon),
+            '(' => Some(TokenKind::OpenParen),
+            ')' => Some(TokenKind::CloseParen),
+            '{' => Some(TokenKind::OpenBrace),
+            '}' => Some(TokenKind::CloseBrace),
+            '[' => Some(TokenKind::OpenSquareBracket),
+            ']' => Some(TokenKind::CloseSquareBracket),
+            '.' => Some(TokenKind::Dot),
+            '?' => Some(TokenKind::Question),
             _ => None,
         };
 
@@ -277,13 +290,13 @@ impl Scanner {
 
                 if let Some('=') = next_char {
                     self.current_pos += 1;
-                    return Some(self.consume(Token::StrictEquality));
+                    return Some(self.consume(TokenKind::StrictEquality));
                 }
 
-                return Some(self.consume(Token::Equality));
+                return Some(self.consume(TokenKind::Equality));
             }
 
-            return Some(self.consume(Token::Equal));
+            return Some(self.consume(TokenKind::Equal));
         }
 
         if current_char == '!' {
@@ -296,13 +309,13 @@ impl Scanner {
 
                 if let Some('=') = next_char {
                     self.current_pos += 1;
-                    return Some(self.consume(Token::StrictInequality));
+                    return Some(self.consume(TokenKind::StrictInequality));
                 }
 
-                return Some(self.consume(Token::Inequality));
+                return Some(self.consume(TokenKind::Inequality));
             }
 
-            return Some(self.consume(Token::Exclamatory));
+            return Some(self.consume(TokenKind::Exclamatory));
         }
 
         if current_char == '%' {
@@ -312,10 +325,10 @@ impl Scanner {
 
             if let Some('=') = next_char {
                 self.current_pos += 1;
-                return Some(self.consume(Token::PercentEqual));
+                return Some(self.consume(TokenKind::PercentEqual));
             }
 
-            return Some(self.consume(Token::Percent));
+            return Some(self.consume(TokenKind::Percent));
         }
 
         if current_char == '>' {
@@ -325,10 +338,10 @@ impl Scanner {
 
             if let Some('=') = next_char {
                 self.current_pos += 1;
-                return Some(self.consume(Token::MoreThanOrEqual));
+                return Some(self.consume(TokenKind::MoreThanOrEqual));
             }
 
-            return Some(self.consume(Token::MoreThan));
+            return Some(self.consume(TokenKind::MoreThan));
         }
 
         if current_char == '<' {
@@ -338,10 +351,10 @@ impl Scanner {
 
             if let Some('=') = next_char {
                 self.current_pos += 1;
-                return Some(self.consume(Token::LessThanOrEqual));
+                return Some(self.consume(TokenKind::LessThanOrEqual));
             }
 
-            return Some(self.consume(Token::LessThan));
+            return Some(self.consume(TokenKind::LessThan));
         }
 
         if current_char == '/' {
@@ -351,7 +364,7 @@ impl Scanner {
 
             if let Some('=') = next_char {
                 self.current_pos += 1;
-                return Some(self.consume(Token::DivEqual));
+                return Some(self.consume(TokenKind::DivEqual));
             }
 
             if let Some('/') = next_char {
@@ -366,11 +379,11 @@ impl Scanner {
                 }
 
                 let token =
-                    Token::Comment(self.source_code[self.current_pos..=cursor + 1].to_string());
+                    TokenKind::Comment(self.source_code[self.current_pos..=cursor + 1].to_string());
                 self.current_pos = cursor + 2;
                 return Some(self.consume(token));
             } else {
-                return Some(self.consume(Token::Div));
+                return Some(self.consume(TokenKind::Div));
             }
         }
 
@@ -382,13 +395,13 @@ impl Scanner {
 
                 if let Some('=') = chars.next() {
                     self.current_pos += 1;
-                    return Some(self.consume(Token::StrictEquality));
+                    return Some(self.consume(TokenKind::StrictEquality));
                 }
 
-                return Some(self.consume(Token::Equality));
+                return Some(self.consume(TokenKind::Equality));
             }
 
-            return Some(self.consume(Token::Equal));
+            return Some(self.consume(TokenKind::Equal));
         }
 
         if current_char == '+' {
@@ -398,15 +411,15 @@ impl Scanner {
 
             if let Some('=') = next_char {
                 self.current_pos += 1;
-                return Some(self.consume(Token::PlusEqual));
+                return Some(self.consume(TokenKind::PlusEqual));
             }
 
             if let Some('+') = next_char {
                 self.current_pos += 1;
-                return Some(self.consume(Token::PlusPlus));
+                return Some(self.consume(TokenKind::PlusPlus));
             }
 
-            return Some(self.consume(Token::Plus));
+            return Some(self.consume(TokenKind::Plus));
         }
 
         if current_char == '*' {
@@ -416,7 +429,7 @@ impl Scanner {
 
             if let Some('=') = next_char {
                 self.current_pos += 1;
-                return Some(self.consume(Token::MulEqual));
+                return Some(self.consume(TokenKind::MulEqual));
             }
 
             if let Some('*') = next_char {
@@ -426,13 +439,13 @@ impl Scanner {
 
                 if let Some('=') = next_char {
                     self.current_pos += 1;
-                    return Some(self.consume(Token::MulMulEqual));
+                    return Some(self.consume(TokenKind::MulMulEqual));
                 }
 
-                return Some(self.consume(Token::MulMul));
+                return Some(self.consume(TokenKind::MulMul));
             }
 
-            return Some(self.consume(Token::Mul));
+            return Some(self.consume(TokenKind::Mul));
         }
 
         if current_char == '-' {
@@ -442,15 +455,15 @@ impl Scanner {
 
             if let Some('=') = next_char {
                 self.current_pos += 1;
-                return Some(self.consume(Token::MinusEqual));
+                return Some(self.consume(TokenKind::MinusEqual));
             }
 
             if let Some('-') = next_char {
                 self.current_pos += 1;
-                return Some(self.consume(Token::MinusMinus));
+                return Some(self.consume(TokenKind::MinusMinus));
             }
 
-            return Some(self.consume(Token::Minus));
+            return Some(self.consume(TokenKind::Minus));
         }
 
         if current_char == '|' {
@@ -458,10 +471,10 @@ impl Scanner {
 
             if let Some('|') = chars.next() {
                 self.current_pos += 1;
-                return Some(self.consume(Token::Or));
+                return Some(self.consume(TokenKind::Or));
             }
 
-            return Some(self.consume(Token::BitwiseOr));
+            return Some(self.consume(TokenKind::BitwiseOr));
         }
 
         if current_char == '&' {
@@ -469,10 +482,10 @@ impl Scanner {
 
             if let Some('&') = chars.next() {
                 self.current_pos += 1;
-                return Some(self.consume(Token::And));
+                return Some(self.consume(TokenKind::And));
             }
 
-            return Some(self.consume(Token::BitwiseAnd));
+            return Some(self.consume(TokenKind::BitwiseAnd));
         }
 
         if let Some(_) = found_token {
@@ -495,7 +508,7 @@ impl Scanner {
             let number = number_str
                 .parse::<f64>()
                 .expect("Error during number parsing");
-            let token = Token::Number(number);
+            let token = TokenKind::Number(number);
 
             self.current_pos = cursor + 1;
 
@@ -522,35 +535,35 @@ impl Scanner {
         }
 
         let keywords = HashMap::from([
-            ("let", Token::LetKeyword),
-            ("const", Token::ConstKeyword),
-            ("if", Token::IfKeyword),
-            ("else", Token::ElseKeyword),
-            ("class", Token::ClassKeyword),
-            ("new", Token::NewKeyword),
-            ("extends", Token::ExtendsKeyword),
-            ("for", Token::ForKeyword),
-            ("in", Token::InKeyword),
-            ("function", Token::FunctionKeyword),
-            ("this", Token::ThisKeyword),
-            ("do", Token::DoKeyword),
-            ("while", Token::WhileKeyword),
-            ("try", Token::TryKeyword),
-            ("catch", Token::CatchKeyword),
-            ("break", Token::BreakKeyword),
-            ("continue", Token::ContinueKeyword),
-            ("super", Token::SuperKeyword),
-            ("throw", Token::ThrowKeyword),
-            ("yield", Token::YieldKeyword),
-            ("export", Token::ExportKeyword),
-            ("import", Token::ImportKeyword),
-            ("return", Token::ReturnKeyword),
-            ("static", Token::StaticKeyword),
-            ("switch", Token::SwitchKeyword),
-            ("true", Token::Boolean("true".to_string())),
-            ("false", Token::Boolean("false".to_string())),
-            ("null", Token::Null),
-            ("undefined", Token::Undefined),
+            ("let", TokenKind::LetKeyword),
+            ("const", TokenKind::ConstKeyword),
+            ("if", TokenKind::IfKeyword),
+            ("else", TokenKind::ElseKeyword),
+            ("class", TokenKind::ClassKeyword),
+            ("new", TokenKind::NewKeyword),
+            ("extends", TokenKind::ExtendsKeyword),
+            ("for", TokenKind::ForKeyword),
+            ("in", TokenKind::InKeyword),
+            ("function", TokenKind::FunctionKeyword),
+            ("this", TokenKind::ThisKeyword),
+            ("do", TokenKind::DoKeyword),
+            ("while", TokenKind::WhileKeyword),
+            ("try", TokenKind::TryKeyword),
+            ("catch", TokenKind::CatchKeyword),
+            ("break", TokenKind::BreakKeyword),
+            ("continue", TokenKind::ContinueKeyword),
+            ("super", TokenKind::SuperKeyword),
+            ("throw", TokenKind::ThrowKeyword),
+            ("yield", TokenKind::YieldKeyword),
+            ("export", TokenKind::ExportKeyword),
+            ("import", TokenKind::ImportKeyword),
+            ("return", TokenKind::ReturnKeyword),
+            ("static", TokenKind::StaticKeyword),
+            ("switch", TokenKind::SwitchKeyword),
+            ("true", TokenKind::Boolean("true".to_string())),
+            ("false", TokenKind::Boolean("false".to_string())),
+            ("null", TokenKind::Null),
+            ("undefined", TokenKind::Undefined),
         ]);
 
         let identifier = &self.source_code[self.current_pos..=cursor];
@@ -561,11 +574,11 @@ impl Scanner {
             return Some(self.consume(token_kind.clone()));
         } else {
             self.current_pos += identifier.len();
-            return Some(self.consume(Token::Identifier(identifier.to_string())));
+            return Some(self.consume(TokenKind::Identifier(identifier.to_string())));
         }
     }
 
-    fn parse_string_literal(&mut self, quote_char: char) -> Option<Token> {
+    fn parse_string_literal(&mut self, quote_char: char) -> Option<TokenKind> {
         let mut cursor = self.current_pos;
         let mut chars = self.source_code[cursor..].chars();
 
@@ -579,7 +592,7 @@ impl Scanner {
             }
         }
 
-        let token = Token::String(self.source_code[self.current_pos + 1..cursor].to_string());
+        let token = TokenKind::String(self.source_code[self.current_pos + 1..cursor].to_string());
         self.current_pos = cursor + 1;
         return Some(token);
     }

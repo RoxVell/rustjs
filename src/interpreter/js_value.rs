@@ -1,9 +1,12 @@
 use std::fmt::{Debug, Display, Formatter};
-use crate::node::{BlockStatementNode, NodeKind};
+use crate::node::{BlockStatementNode, AstStatement};
 use super::environment::Environment;
 use std::collections::HashMap;
 use std::{cell::RefCell, rc::Rc, ops};
 use crate::interpreter::Interpreter;
+use crate::scanner::TokenKind::Percent;
+
+pub type JsObjectRef = Rc<RefCell<JsObject>>;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum JsValue {
@@ -13,17 +16,91 @@ pub enum JsValue {
     Number(f64),
     Boolean(bool),
     Function(Func),
-    Object(Rc<RefCell<JsObject>>),
+    Object(JsObjectRef),
 }
 
 pub fn create_js_object(value: JsObject) -> JsValue {
     JsValue::Object(Rc::new(RefCell::new(value)))
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct JsObject {
+#[derive(Default, Debug, Clone, PartialEq)]
+struct InternalObject {
     pub properties: HashMap<String, JsValue>,
-    pub prototype: Option<Box<JsObject>>,
+    pub prototype: Option<JsObjectRef>,
+}
+
+pub trait Object {
+    fn set_prototype(&mut self, prototype: JsObjectRef);
+    fn add_property(&mut self, key: &str, value: JsValue);
+    fn get_property_value(&self, key: &str) -> JsValue;
+}
+
+impl Object for InternalObject {
+    fn set_prototype(&mut self, prototype: JsObjectRef) {
+        self.prototype = Some(prototype);
+    }
+
+    fn add_property(&mut self, key: &str, value: JsValue) {
+        self.properties.insert(key.to_string(), value);
+    }
+
+    fn get_property_value(&self, key: &str) -> JsValue {
+        if self.properties.contains_key(key) {
+            return self.properties.get(key).map_or(JsValue::Undefined, |x| x.clone());
+        }
+
+        if self.prototype.is_some() {
+            return self.prototype.as_ref().unwrap().borrow().get_property_value(key);
+        }
+
+        return JsValue::Undefined;
+    }
+}
+
+impl InternalObject {
+    pub fn new<T: Into<HashMap<String, JsValue>>>(value: T, prototype: Option<JsObjectRef>) -> Self {
+        Self {
+            properties: value.into(),
+            prototype,
+        }
+    }
+}
+
+#[derive(Default, Debug, Clone, PartialEq)]
+pub struct JsObject {
+    internal_object: RefCell<InternalObject>,
+}
+
+impl JsObject {
+    pub fn new<T: Into<HashMap<String, JsValue>>>(value: T, prototype: Option<JsObjectRef>) -> Self {
+        Self {
+            internal_object: RefCell::new(InternalObject::new(value, prototype)),
+        }
+    }
+}
+
+trait HasInternalObject {
+    fn get_internal_object(&self) -> &RefCell<InternalObject>;
+}
+
+impl<T: HasInternalObject> Object for T {
+    fn set_prototype(&mut self, prototype: JsObjectRef) {
+        self.get_internal_object().borrow_mut().set_prototype(prototype);
+    }
+
+    fn add_property(&mut self, key: &str, value: JsValue) {
+        self.get_internal_object().borrow_mut().add_property(key, value);
+    }
+
+    fn get_property_value(&self, key: &str) -> JsValue {
+        self.get_internal_object().borrow().get_property_value(key)
+    }
+}
+
+impl HasInternalObject for JsObject {
+    fn get_internal_object(&self) -> &RefCell<InternalObject> {
+        &self.internal_object
+    }
 }
 
 impl From<f64> for JsValue {
@@ -109,44 +186,6 @@ impl ops::Div<&JsValue> for &JsValue {
     }
 }
 
-impl JsObject {
-    pub fn new_empty() -> Self {
-        Self {
-            properties: HashMap::new(),
-            prototype: None,
-        }
-    }
-
-    pub fn new_with_properties<T: Into<HashMap<String, JsValue>>>(value: T) -> Self {
-        Self {
-            properties: value.into(),
-            prototype: None,
-        }
-    }
-
-    pub fn set_prototype(&mut self, prototype: JsObject) {
-        self.prototype = Some(Box::new(prototype));
-    }
-
-    pub fn add_property(&mut self, key: &str, value: JsValue) {
-//        println!("add_property {key} {value:?}");
-        self.properties.insert(key.to_string(), value);
-    }
-
-    pub fn get_value_property(&self, key: &str) -> JsValue {
-       // println!("get_value_property {key} {:#?} {:#?}", self.properties, self.prototype);
-        if self.properties.contains_key(key) {
-            return self.properties.get(key).map_or(JsValue::Undefined, |x| x.clone());
-        }
-
-        if self.prototype.is_some() {
-            return self.prototype.as_ref().unwrap().get_value_property(key);
-        }
-
-        return JsValue::Undefined;
-    }
-}
-
 #[derive(Debug, Clone, PartialEq)]
 pub enum Func {
     Js(JsFunction),
@@ -159,11 +198,12 @@ pub trait Callable: Sized {
 
 #[derive(Clone)]
 pub struct NativeFunction {
+    internal_object: RefCell<InternalObject>,
     pub function: fn(&Interpreter, &Vec<JsValue>) -> Result<JsValue, String>,
 }
 
 pub fn create_native_function(function: fn(&Interpreter, &Vec<JsValue>) -> Result<JsValue, String>) -> JsValue {
-    JsValue::Function(Func::Native(NativeFunction { function }))
+    JsValue::Function(Func::Native(NativeFunction { function, internal_object: RefCell::new(InternalObject::default()), }))
 }
 
 impl Debug for NativeFunction {
@@ -194,17 +234,50 @@ impl Callable for Func {
 }
 
 impl Callable for JsFunction {
-    fn call(&self, interpreter: &Interpreter, value: &Vec<JsValue>) -> Result<JsValue, String> {
+    fn call(&self, interpreter: &Interpreter, _: &Vec<JsValue>) -> Result<JsValue, String> {
         let result = interpreter.eval_node(self.body.as_ref());
         return result.map(|x| x.unwrap_or(JsValue::Undefined));
     }
 }
 
+impl HasInternalObject for JsFunction {
+    fn get_internal_object(&self) -> &RefCell<InternalObject> {
+        &self.internal_object
+    }
+}
+
+impl HasInternalObject for NativeFunction {
+    fn get_internal_object(&self) -> &RefCell<InternalObject> {
+        &self.internal_object
+    }
+}
+
+impl HasInternalObject for Func {
+    fn get_internal_object(&self) -> &RefCell<InternalObject> {
+        match self {
+            Func::Js(function) => function.get_internal_object(),
+            Func::Native(function) => function.get_internal_object(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct JsFunction {
+    internal_object: RefCell<InternalObject>,
     pub arguments: Vec<JsFunctionArg>,
-    pub body: Box<NodeKind>,
+    pub body: Box<AstStatement>,
     pub environment: Box<Environment>,
+}
+
+impl JsFunction {
+    pub fn new(arguments: Vec<JsFunctionArg>, body: Box<AstStatement>, environment: Box<Environment>) -> Self {
+        Self {
+            internal_object: RefCell::new(InternalObject::default()),
+            arguments,
+            body,
+            environment,
+        }
+    }
 }
 
 impl Into<JsValue> for JsFunction {
@@ -220,30 +293,11 @@ pub fn create_empty_function_as_js_value() -> JsValue {
 pub fn create_empty_function() -> JsFunction {
     JsFunction {
         arguments: vec![],
-        body: Box::new(NodeKind::BlockStatement(BlockStatementNode { statements: vec![] })),
+        body: Box::new(AstStatement::BlockStatement(BlockStatementNode { statements: vec![] })),
         environment: Box::new(Environment::default()),
+        internal_object: RefCell::new(InternalObject::default()),
     }
 }
-
-// impl FromStr for JsFunction {
-//     type Err = String;
-//
-//     fn from_str(code: &str) -> Result<Self, Self::Err> {
-//         let mut interpreter = Interpreter::default();
-//         let ast = parser::Parser::parse_code_to_ast(code)?;
-//
-//         if let NodeKind::BlockStatement(block_statement) = ast.node {
-//             if let NodeKind::FunctionDeclaration(function_declaration) = &block_statement.statements[0].node {
-//                 let js_function_value = interpreter.create_js_function(&function_declaration.arguments, *function_declaration.body.clone());
-//
-//                 if let JsValue::Function(value) = js_function_value {
-//                     return Ok(value);
-//                 }
-//             }
-//         }
-//         todo!()
-//     }
-// }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct JsFunctionArg {
