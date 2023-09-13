@@ -2,9 +2,12 @@ mod interpreter;
 mod node;
 mod parser;
 mod scanner;
+mod value;
+
 use crate::node::{format_ast};
 use interpreter::*;
 use std::fs;
+use crate::value::JsValue;
 
 fn eval(code: &str, is_debug: bool) {
     println!("-----DEBUG (printing tokens)-----");

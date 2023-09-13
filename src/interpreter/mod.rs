@@ -2,11 +2,10 @@ use std::{cell::RefCell, rc::Rc};
 
 use crate::node::*;
 mod environment;
-
 pub use environment::Environment;
-mod js_value;
-pub use js_value::*;
-use std::collections::HashMap;
+use crate::value::{JsValue};
+use crate::value::function::{JsFunction, JsFunctionArg, Callable};
+use crate::value::object::{JsObject, ObjectKind};
 
 const CONSTRUCTOR_METHOD_NAME: &'static str = "constructor";
 
@@ -124,14 +123,14 @@ impl Interpreter {
     }
 
     fn eval_object_expression(&self, node: &ObjectExpressionNode) -> Result<JsValue, String> {
-        let mut object_value = JsObject::default();
+        let mut object_value = JsObject::empty();
 
         for property in &node.properties {
             let key = self.eval_member_expression_key(&property.key, property.computed)?;
             object_value.add_property(&key, self.eval_expression(&property.value));
         }
 
-        return Ok(JsValue::Object(Rc::new(RefCell::new(object_value))));
+        return Ok(object_value.into());
     }
 
     fn eval_object_property(&self, node: &ObjectPropertyNode) -> JsValue {
@@ -181,7 +180,7 @@ impl Interpreter {
             let function_signature = &constructor_method.unwrap().as_ref().function_signature;
             self.create_js_function(&function_signature.arguments, *function_signature.body.clone())
         } else {
-            create_empty_function_as_js_value()
+            JsFunction::empty().into()
         }
     }
 
@@ -189,7 +188,7 @@ impl Interpreter {
         &self,
         node: &ClassDeclarationNode,
     ) -> JsValue {
-        let mut prototype_object = JsObject::default();
+        let mut prototype_object = JsObject::empty();
 
         for class_method in &node.methods {
             let method_value = self.create_js_function(&class_method.function_signature.arguments, *class_method.function_signature.body.clone());
@@ -206,7 +205,7 @@ impl Interpreter {
             // }
         }
 
-        create_js_object(prototype_object)
+        prototype_object.into()
     }
 
     fn eval_conditional_expression(
@@ -253,54 +252,56 @@ impl Interpreter {
     fn eval_call_expression(&self, node: &CallExpressionNode) -> Result<JsValue, String> {
         let callee = self.eval_expression(&node.callee);
 
-        if let JsValue::Function(function) = &callee {
-            let mut function_execution_environment = self.create_new_environment();
+        if let JsValue::Object(object) = &callee {
+            if let ObjectKind::Function(function) = &object.borrow().kind {
+                let mut function_execution_environment = self.create_new_environment();
 
-            if let AstExpression::MemberExpression(expr) = node.callee.as_ref() {
-                function_execution_environment.define_variable(
-                    "this".to_string(),
-                    self.eval_expression(&expr.object),
-                );
-                // function_execution_environment.print_variables();
-            }
-
-            let values: Vec<JsValue> = node
-                .params
-                .iter()
-                .map(|param| {
-                    return self.eval_expression(&param);
-                })
-                .collect();
-
-            match function {
-                Func::Js(function) => {
-                    function
-                        .arguments
-                        .iter()
-                        .zip(&node.params)
-                        .for_each(|(arg, node)| {
-                            let value = self.eval_expression(&node);
-
-                            function_execution_environment
-                                .define_variable(arg.name.clone(), value)
-                                .unwrap();
-                        });
-                    self.set_environment(function_execution_environment);
-                    let result = function.call(self, &values);
-                    println!("{result:?}");
-                    self.pop_environment();
-                    return result;
+                if let AstExpression::MemberExpression(expr) = node.callee.as_ref() {
+                    function_execution_environment.define_variable(
+                        "this".to_string(),
+                        self.eval_expression(&expr.object),
+                    );
+                    // function_execution_environment.print_variables();
                 }
-                Func::Native(function) => {
-                    self.set_environment(function_execution_environment);
-                    let result = function.call(self, &values);
-                    self.pop_environment();
-                    return result;
+
+                let values: Vec<JsValue> = node
+                    .params
+                    .iter()
+                    .map(|param| {
+                        return self.eval_expression(&param);
+                    })
+                    .collect();
+
+                match function {
+                    JsFunction::Ordinary(function) => {
+                        function
+                            .arguments
+                            .iter()
+                            .zip(&node.params)
+                            .for_each(|(arg, node)| {
+                                let value = self.eval_expression(&node);
+
+                                function_execution_environment
+                                    .define_variable(arg.name.clone(), value)
+                                    .unwrap();
+                            });
+                        self.set_environment(function_execution_environment);
+                        let result = function.call(self, &values);
+                        println!("{result:?}");
+                        self.pop_environment();
+                        return result;
+                    }
+                    JsFunction::Native(function) => {
+                        self.set_environment(function_execution_environment);
+                        let result = function.call(self, &values);
+                        self.pop_environment();
+                        return result;
+                    }
                 }
             }
-        } else {
-            return Err(format!("{} is not callable", callee.get_type_as_str()));
         }
+
+        Err(format!("{} is not callable", callee.get_type_as_str()))
     }
 
     fn create_new_environment(&self) -> Environment {
@@ -355,11 +356,17 @@ impl Interpreter {
             });
         }
 
-        return JsValue::Function(Func::Js(JsFunction::new(
+        JsFunction::ordinary_function(
             arguments,
             Box::new(body.clone()),
             Box::new(self.environment.borrow().clone())
-        )));
+        ).into()
+
+        // return JsValue::Object(Rc::new(RefCell::new(Obj::Function(Func::Js(JsFunction::new(
+        //     arguments,
+        //     Box::new(body.clone()),
+        //     Box::new(self.environment.borrow().clone())
+        // ))))));
     }
 
     fn eval_assignment_expression(
@@ -402,6 +409,8 @@ impl Interpreter {
             }
             AstExpression::MemberExpression(node) => {
                 let object = self.eval_expression(&node.object);
+
+                println!("{:?}", object);
 
                 if let JsValue::Object(object_value) = object {
                     let mut object = object_value;
@@ -530,8 +539,8 @@ impl Interpreter {
             | BinaryOperator::StrictEquality
             | BinaryOperator::Inequality
             | BinaryOperator::StrictInequality => {
-                if let JsValue::Number(left_number) = evaluated_left_node {
-                    if let JsValue::Number(right_number) = evaluated_right_node {
+                match (&evaluated_left_node, &evaluated_right_node) {
+                    (JsValue::Number(left_number), JsValue::Number(right_number)) => {
                         let value = match node.operator {
                             BinaryOperator::Equality | BinaryOperator::StrictEquality => {
                                 left_number == right_number
@@ -543,11 +552,21 @@ impl Interpreter {
                         };
 
                         return Ok(JsValue::Boolean(value));
-                    }
-                }
+                    },
+                    (JsValue::String(left_string), JsValue::String(right_string)) => {
+                        let value = match node.operator {
+                            BinaryOperator::Equality | BinaryOperator::StrictEquality => {
+                                left_string == right_string
+                            }
+                            BinaryOperator::Inequality | BinaryOperator::StrictInequality => {
+                                left_string != right_string
+                            }
+                            _ => unreachable!(),
+                        };
 
-                if let JsValue::Object(object_left) = &evaluated_left_node {
-                    if let JsValue::Object(object_right) = &evaluated_right_node {
+                        return Ok(JsValue::Boolean(value));
+                    },
+                    (JsValue::Object(object_left), JsValue::Object(object_right)) => {
                         let value = match node.operator {
                             BinaryOperator::Equality | BinaryOperator::StrictEquality => {
                                 object_left == object_right
@@ -560,14 +579,15 @@ impl Interpreter {
 
                         return Ok(JsValue::Boolean(value));
                     }
+                    _ => {
+                        return Ok(JsValue::Boolean(false));
+                        // Err(format!(
+                        //     "Cannot compare value with type \"{}\" and \"{}\"",
+                        //     evaluated_left_node.get_type_as_str(),
+                        //     evaluated_right_node.get_type_as_str()
+                        // ).to_string())
+                    }
                 }
-
-                Err(format!(
-                    "Cannot compare value with type \"{}\" and \"{}\"",
-                    evaluated_left_node.get_type_as_str(),
-                    evaluated_right_node.get_type_as_str()
-                )
-                .to_string())
             }
         }
     }
@@ -685,19 +705,19 @@ fn get_global_environment() -> Environment {
     Environment::new_with_variables([
         (
             "console".to_string(),
-            create_js_object( JsObject::new([
-                ("log".to_string(), create_native_function(console_log)),
-            ], None)),
+            JsValue::object([
+                ("log".to_string(), JsValue::native_function(console_log)),
+            ], None),
         ),
         (
             "setPrototypeOf".to_string(),
-            create_native_function(set_prototype),
+            JsValue::native_function(set_prototype),
         ),
         (
             "performance".to_string(),
-            create_js_object(JsObject::new([
-                ("now".to_string(), create_native_function(performance_now))
-            ], None)),
+            JsValue::object([
+                ("now".to_string(), JsValue::native_function(performance_now))
+            ], None),
         ),
     ])
 }
@@ -848,7 +868,7 @@ fn object_expression_works() {
 
     let mut interpreter = Interpreter::default();
 
-    let expected = create_js_object(JsObject::new([
+    let expected = JsValue::object([
         ("5".to_string(), JsValue::Number(5.0)),
         (
             "qwe-123".to_string(),
@@ -862,7 +882,7 @@ fn object_expression_works() {
             "hello 123".to_string(),
             JsValue::String("hello 123".to_string()),
         ),
-    ], None));
+    ], None);
 
     assert_eq!(interpret(&mut interpreter, code), expected);
     assert_eq!(interpret(&mut interpreter, "a[5];"), JsValue::Number(5.0));

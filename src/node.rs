@@ -1,7 +1,6 @@
-use crate::scanner::{Span, Token, TokenKind};
+use crate::scanner::{Token, TokenKind};
 use std::fmt;
 use std::fmt::{Debug, Formatter};
-use std::process::id;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum AstStatement {
@@ -131,7 +130,7 @@ pub struct ClassMethodNode {
 pub struct MemberExpressionNode {
     pub computed: bool,
     pub object: Box<AstExpression>,
-    pub property: Box<AstExpression>, // TODO: type
+    pub property: Box<AstExpression>, // TODO: maybe type
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -145,19 +144,6 @@ pub struct ConditionalExpressionNode {
 pub struct ProgramNode {
     pub statements: Vec<AstStatement>,
 }
-
-// #[derive(Clone, PartialEq)]
-// pub struct Node {
-//     pub node: NodeKind,
-//     pub start: Span,
-//     pub end: Span,
-// }
-
-// impl Debug for Node {
-//     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-//         write!(f, "{:?}", self.node)
-//     }
-// }
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ForStatementNode {
