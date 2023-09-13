@@ -1,6 +1,6 @@
-use super::js_value::JsValue;
 use std::collections::HashMap;
 use std::{cell::RefCell, rc::Rc};
+use crate::value::JsValue;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct Environment {
@@ -75,15 +75,15 @@ impl Environment {
         return Ok(());
     }
 
-    pub fn get_variable_value(&self, variable_name: &str) -> Option<JsValue> {
+    pub fn get_variable_value(&self, variable_name: &str) -> JsValue {
 //         println!("get_variable_value {} {:#?}", variable_name, self.variables);
         if self.variables.contains_key(variable_name) {
-            return self.variables.get(variable_name).map(|x| x.clone());
+            return self.variables.get(variable_name).map_or(JsValue::Undefined, |x| x.clone());
         } else {
             return self
                 .parent
                 .as_ref()
-                .map(|parent_env| parent_env.borrow().get_variable_value(variable_name))?;
+                .map_or(JsValue::Undefined, |parent_env| parent_env.borrow().get_variable_value(variable_name));
         }
     }
 }
