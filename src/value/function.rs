@@ -1,6 +1,7 @@
 use std::cell::RefCell;
+use std::fmt::{Formatter, write};
 use std::rc::Rc;
-use crate::interpreter::{Environment, Interpreter};
+use crate::interpreter::{Environment, EnvironmentRef, Interpreter};
 use crate::node::{AstStatement, BlockStatementNode};
 use crate::value::JsValue;
 use crate::value::object::{JsObject, ObjectKind};
@@ -16,8 +17,12 @@ impl JsFunction {
         Self::Native(NativeFunction { function })
     }
 
-    pub fn ordinary_function(arguments: Vec<JsFunctionArg>, body: Box<AstStatement>, environment: Box<Environment>) -> Self {
+    pub fn ordinary_function(arguments: Vec<JsFunctionArg>, body: Box<AstStatement>, environment: EnvironmentRef) -> Self {
         OrdinaryFunction::new(arguments, body, environment).into()
+    }
+
+    pub fn to_object(self) -> JsObject {
+        JsObject::new(ObjectKind::Function(self), [], None)
     }
 
     pub fn empty() -> Self {
@@ -27,9 +32,7 @@ impl JsFunction {
 
 impl Into<JsValue> for JsFunction {
     fn into(self) -> JsValue {
-        JsValue::Object(Rc::new(RefCell::new(
-            JsObject { kind: ObjectKind::Function(self), properties: Default::default(), prototype: None }
-        )))
+        JsValue::Object(JsObject { kind: ObjectKind::Function(self), properties: Default::default(), prototype: None }.to_ref())
     }
 }
 
@@ -37,11 +40,11 @@ impl Into<JsValue> for JsFunction {
 pub struct OrdinaryFunction {
     pub arguments: Vec<JsFunctionArg>,
     pub body: Box<AstStatement>,
-    pub environment: Box<Environment>,
+    pub environment: EnvironmentRef,
 }
 
 impl OrdinaryFunction {
-    pub fn new(arguments: Vec<JsFunctionArg>, body: Box<AstStatement>, environment: Box<Environment>) -> Self {
+    pub fn new(arguments: Vec<JsFunctionArg>, body: Box<AstStatement>, environment: EnvironmentRef) -> Self {
         Self {
             arguments,
             body,
@@ -53,7 +56,7 @@ impl OrdinaryFunction {
         Self {
             arguments: vec![],
             body: Box::new(AstStatement::BlockStatement(BlockStatementNode { statements: vec![] })),
-            environment: Box::new(Environment::default()),
+            environment: Rc::new(RefCell::new(Environment::default())),
         }
     }
 }
@@ -64,10 +67,16 @@ impl Into<JsFunction> for OrdinaryFunction {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub struct JsFunctionArg {
     pub name: String,
     pub default_value: JsValue,
+}
+
+impl std::fmt::Debug for JsFunctionArg {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Argument '{}' (default = {}))", self.name, self.default_value)
+    }
 }
 
 impl Callable for OrdinaryFunction {

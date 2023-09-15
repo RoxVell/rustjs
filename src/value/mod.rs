@@ -1,11 +1,13 @@
 pub mod object;
 pub mod function;
 
+use std::cell::RefCell;
 use std::collections::HashMap;
-use std::fmt::{Debug, Display};
+use std::fmt::{Debug, Display, Formatter, write};
 use std::ops;
+use std::rc::Rc;
 use crate::interpreter::Interpreter;
-use crate::value::function::JsFunction;
+use crate::value::function::{JsFunction, JsFunctionArg};
 use crate::value::object::{JsObject, JsObjectRef, ObjectKind};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -31,7 +33,7 @@ impl JsValue {
     }
 
     pub fn object<T: Into<HashMap<String, JsValue>>>(properties: T, prototype: Option<JsObjectRef>) -> Self {
-        JsObject::new(properties, prototype).into()
+        JsObject::new(ObjectKind::Ordinary, properties, prototype).into()
     }
 
     pub fn get_type_as_str(&self) -> String {
@@ -151,13 +153,13 @@ impl ops::Div<&JsValue> for &JsValue {
 }
 
 impl Display for JsValue {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             JsValue::Undefined => write!(f, "\x1b[37mundefined\x1b[0m"),
             JsValue::Null => write!(f, "null"),
             JsValue::String(str) => write!(f, "\x1b[93m\"{}\"\x1b[0m", str),
             JsValue::Number(number) => write!(f, "\x1b[36m{}\x1b[0m", number),
-            JsValue::Boolean(value) => write!(f, "{}", if *value { "true" } else { "false" }),
+            JsValue::Boolean(value) => write!(f, "\x1b[35m{}\x1b[0m", if *value { "true" } else { "false" }),
             JsValue::Object(object) => {
                 match &object.borrow().kind {
                     ObjectKind::Ordinary => write!(f, "[object Object]"),

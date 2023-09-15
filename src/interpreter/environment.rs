@@ -1,12 +1,24 @@
 use std::collections::HashMap;
 use std::{cell::RefCell, rc::Rc};
+use std::fmt::{Formatter, write};
 use crate::value::JsValue;
 
-#[derive(Debug, Clone, PartialEq)]
+// TODO: Move
+const THIS_KEYWORD: &'static str = "this";
+
+#[derive(Clone, PartialEq)]
 pub struct Environment {
     parent: Option<Rc<RefCell<Environment>>>,
     variables: HashMap<String, JsValue>,
 }
+
+impl std::fmt::Debug for Environment {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Env").finish()
+    }
+}
+
+pub type EnvironmentRef = Rc<RefCell<Environment>>;
 
 impl Default for Environment {
     fn default() -> Self {
@@ -21,7 +33,7 @@ impl Environment {
     pub fn new(parent: Rc<RefCell<Environment>>) -> Self {
         Self {
             parent: Some(parent),
-            ..Default::default()
+            variables: HashMap::new(),
         }
     }
 
@@ -36,8 +48,8 @@ impl Environment {
         println!("{:?}", self.variables);
     }
 
-    pub fn get_parent(&mut self) -> Option<Rc<RefCell<Environment>>> {
-        std::mem::replace(&mut self.parent, None)
+    pub fn get_parent(&self) -> Option<Rc<RefCell<Environment>>> {
+        self.parent.as_ref().map(|x| Rc::clone(x))
     }
 
     pub fn define_variable(&mut self, variable_name: String, value: JsValue) -> Result<(), String> {
@@ -53,6 +65,14 @@ impl Environment {
         // );
 
         return Ok(());
+    }
+
+    pub fn set_context(&mut self, value: JsValue) {
+        self.define_variable(THIS_KEYWORD.to_string(), value);
+    }
+
+    pub fn get_context(&self) -> JsValue {
+        self.get_variable_value(THIS_KEYWORD)
     }
 
     pub fn assign_variable(&mut self, variable_name: String, value: JsValue) -> Result<(), String> {
@@ -76,7 +96,6 @@ impl Environment {
     }
 
     pub fn get_variable_value(&self, variable_name: &str) -> JsValue {
-//         println!("get_variable_value {} {:#?}", variable_name, self.variables);
         if self.variables.contains_key(variable_name) {
             return self.variables.get(variable_name).map_or(JsValue::Undefined, |x| x.clone());
         } else {

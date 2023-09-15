@@ -10,9 +10,8 @@ use std::fs;
 use crate::value::JsValue;
 
 fn eval(code: &str, is_debug: bool) {
-    println!("-----DEBUG (printing tokens)-----");
-
     if is_debug {
+        println!("-----DEBUG (printing tokens)-----");
         let mut scanner = scanner::Scanner::new(code.to_string());
 
         while let Some(token) = scanner.next_token() {
@@ -29,6 +28,7 @@ fn eval(code: &str, is_debug: bool) {
 
     if is_debug {
         println!("{:#?}", ast);
+        println!("eqweeqw");
     }
 
     let interpreter = Interpreter::default();

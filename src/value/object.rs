@@ -20,21 +20,29 @@ pub enum ObjectKind {
 }
 
 impl JsObject {
-    pub fn new<T: Into<HashMap<String, JsValue>>>(properties: T, prototype: Option<JsObjectRef>) -> Self {
+    pub fn new<T: Into<HashMap<String, JsValue>>>(kind: ObjectKind, properties: T, prototype: Option<JsObjectRef>) -> Self {
         Self {
-            kind: ObjectKind::Ordinary,
+            kind,
             properties: properties.into(),
             prototype,
         }
     }
 
+    pub fn to_ref(self) -> JsObjectRef {
+        Rc::new(RefCell::new(self))
+    }
+
     /// Creates an empty object with no properties & no prototype
     pub fn empty() -> Self {
-        Self::new([], None)
+        Self::new(ObjectKind::Ordinary, [], None)
     }
 
     pub fn set_prototype(&mut self, prototype: JsObjectRef) {
         self.prototype = Some(prototype);
+    }
+
+    pub fn get_prototype(&self) -> Option<JsObjectRef> {
+        self.prototype.clone()
     }
 
     pub fn add_property(&mut self, key: &str, value: JsValue) {

@@ -1,16 +1,18 @@
 use std::{cell::RefCell, rc::Rc};
+use std::cell::Cell;
 
 use crate::node::*;
 mod environment;
-pub use environment::Environment;
+pub use environment::{Environment, EnvironmentRef};
+// use crate::interpreter::environment::EnvironmentRef;
 use crate::value::{JsValue};
 use crate::value::function::{JsFunction, JsFunctionArg, Callable};
-use crate::value::object::{JsObject, ObjectKind};
+use crate::value::object::{JsObject, JsObjectRef, ObjectKind};
 
 const CONSTRUCTOR_METHOD_NAME: &'static str = "constructor";
 
 pub struct Interpreter {
-    environment: RefCell<Environment>,
+    environment: RefCell<EnvironmentRef>,
 }
 
 impl Interpreter {
@@ -70,17 +72,35 @@ impl Interpreter {
     }
 
     fn eval_this_expression(&self) -> JsValue {
-        return self.environment.borrow().get_variable_value("this");
+        return self.environment.borrow().borrow().get_context();
     }
 
     fn eval_new_expression(&self, node: &NewExpressionNode) -> Result<JsValue, String> {
-        unimplemented!()
+        // println!("eval_new_expression");
+        let callee = self.eval_expression(node.callee.as_ref());
+
+        if !callee.is_function() {
+            return Err("Cannot call non-function value".to_string());
+        }
+
+        let result = self.call_function(node.callee.as_ref(), node.arguments.as_ref(), true);
+
+        // if let JsValue::Object(object) = &result {
+        //     object.borrow_mut().set_prototype()
+        // }
+        // println!("{result:?}");
+
+        // println!("{callee:?}");
+        result
     }
 
     fn eval_block_statement(&self, node: &BlockStatementNode) -> Result<Option<JsValue>, String> {
-        let block_environment = self.create_new_environment();
-        self.set_environment(block_environment);
-        //        self.environment = RefCell::new(block_environment);
+        // println!("eval_block_statement");
+        let env = self.create_new_environment();
+
+        // println!("{:?}", env.arity());
+        // println!("---");
+        self.set_environment(env);
         let result = self.eval_statements(&node.statements);
         self.pop_environment();
         return result;
@@ -90,7 +110,10 @@ impl Interpreter {
         let property_key = self.eval_member_expression_key(&node.property, node.computed)?;
         let resolved_object = self.eval_expression(&node.object);
 
+        // println!("resolved_object: {resolved_object:?}");
+
         if let JsValue::Object(object) = resolved_object {
+            // println!("borrow mut object");
             return Ok(object
                 .borrow_mut()
                 .get_property_value(property_key.as_str()));
@@ -162,16 +185,26 @@ impl Interpreter {
     ///
     fn eval_class_declaration(&self, node: &ClassDeclarationNode) -> Result<JsValue, String> {
         let prototype_object = self.build_prototype_object_from_class_declaration(node);
-        let constructor_function = self.build_constructor_from_class_declaration(node);
+        let mut constructor_function = self.build_constructor_from_class_declaration(node).to_object();
 
-        self.environment.borrow_mut().define_variable(node.name.id.clone(), constructor_function).unwrap();
+        constructor_function.set_prototype(prototype_object.to_ref());
+
+        let constructor_function = JsValue::Object(constructor_function.to_ref());
+
+        self.environment.borrow().borrow_mut().define_variable(
+            node.name.id.clone(),
+            constructor_function.clone()
+        ).unwrap();
+
+        Ok(constructor_function)
+
         // println!("prototype_object {:#?}", prototype_object);
         // println!("constructor_function {:#?}", constructor_function);
 
-        unimplemented!()
+        // unimplemented!()
     }
 
-    fn build_constructor_from_class_declaration(&self, node: &ClassDeclarationNode) -> JsValue {
+    fn build_constructor_from_class_declaration(&self, node: &ClassDeclarationNode) -> JsFunction {
         let constructor_method = node.methods.iter().find(|x| {
             return x.function_signature.name.id == CONSTRUCTOR_METHOD_NAME;
         });
@@ -187,13 +220,13 @@ impl Interpreter {
     fn build_prototype_object_from_class_declaration(
         &self,
         node: &ClassDeclarationNode,
-    ) -> JsValue {
+    ) -> JsObject {
         let mut prototype_object = JsObject::empty();
 
         for class_method in &node.methods {
             let method_value = self.create_js_function(&class_method.function_signature.arguments, *class_method.function_signature.body.clone());
 
-            prototype_object.add_property(&class_method.function_signature.name.id, method_value);
+            prototype_object.add_property(&class_method.function_signature.name.id, method_value.into());
             // if let AstStatement::FunctionDeclaration(method_declaration) = &class_method {
                 // if method_declaration.name.id == CONSTRUCTOR_METHOD_NAME { continue; }
 
@@ -205,7 +238,7 @@ impl Interpreter {
             // }
         }
 
-        prototype_object.into()
+        prototype_object
     }
 
     fn eval_conditional_expression(
@@ -228,7 +261,7 @@ impl Interpreter {
     }
 
     fn set_environment(&self, environment: Environment) {
-        self.environment.replace(environment);
+        self.environment.replace(Rc::new(RefCell::new(environment)));
     }
 
     fn eval_for_statement(&self, node: &ForStatementNode) {
@@ -249,27 +282,30 @@ impl Interpreter {
         self.pop_environment();
     }
 
-    fn eval_call_expression(&self, node: &CallExpressionNode) -> Result<JsValue, String> {
-        let callee = self.eval_expression(&node.callee);
+    fn call_function(&self, callee: &AstExpression, arguments: &Vec<AstExpression>, is_new: bool) -> Result<JsValue, String> {
+        // println!("call_function {callee:?}");
+        let calleer = self.eval_expression(&callee);
 
-        if let JsValue::Object(object) = &callee {
+        // println!("calleer {calleer:?}");
+
+        if let JsValue::Object(object) = &calleer {
             if let ObjectKind::Function(function) = &object.borrow().kind {
                 let mut function_execution_environment = self.create_new_environment();
 
-                if let AstExpression::MemberExpression(expr) = node.callee.as_ref() {
-                    function_execution_environment.define_variable(
-                        "this".to_string(),
-                        self.eval_expression(&expr.object),
-                    );
-                    // function_execution_environment.print_variables();
+                // println!("expr {callee:?}");
+
+                if let AstExpression::MemberExpression(expr) = &callee {
+                    function_execution_environment.set_context(self.eval_expression(&expr.object));;
                 }
 
-                let values: Vec<JsValue> = node
-                    .params
+                // TODO: refactor, ugly as hell
+                if is_new {
+                    function_execution_environment.set_context(JsObject::empty().into());
+                }
+
+                let values: Vec<JsValue> = arguments
                     .iter()
-                    .map(|param| {
-                        return self.eval_expression(&param);
-                    })
+                    .map(|param| self.eval_expression(&param))
                     .collect();
 
                 match function {
@@ -277,7 +313,7 @@ impl Interpreter {
                         function
                             .arguments
                             .iter()
-                            .zip(&node.params)
+                            .zip(arguments)
                             .for_each(|(arg, node)| {
                                 let value = self.eval_expression(&node);
 
@@ -287,7 +323,22 @@ impl Interpreter {
                             });
                         self.set_environment(function_execution_environment);
                         let result = function.call(self, &values);
-                        println!("{result:?}");
+
+                        if let JsValue::Object(result_object) = result.as_ref().unwrap() {
+                            {
+                                let prototype = object.borrow().get_prototype();
+
+                                match prototype {
+                                    None => {}
+                                    Some(proto) => {
+                                        result_object.borrow_mut().set_prototype(proto);
+                                    }
+                                }
+                            }
+                            // object.borrow_mut().set_prototype(object.borrow().get_prototype());
+                        }
+
+                        // println!("{result:?}");
                         self.pop_environment();
                         return result;
                     }
@@ -301,26 +352,84 @@ impl Interpreter {
             }
         }
 
-        Err(format!("{} is not callable", callee.get_type_as_str()))
+        Err(format!("{} is not callable", calleer.get_type_as_str()))
+    }
+
+    fn eval_call_expression(&self, node: &CallExpressionNode) -> Result<JsValue, String> {
+        self.call_function(node.callee.as_ref(), node.params.as_ref(), false)
+        // let callee = self.eval_expression(&node.callee);
+        //
+        // if let JsValue::Object(object) = &callee {
+        //     if let ObjectKind::Function(function) = &object.borrow().kind {
+        //         let mut function_execution_environment = self.create_new_environment();
+        //
+        //         if let AstExpression::MemberExpression(expr) = node.callee.as_ref() {
+        //             function_execution_environment.define_variable(
+        //                 "this".to_string(),
+        //                 self.eval_expression(&expr.object),
+        //             );
+        //             // function_execution_environment.print_variables();
+        //         }
+        //
+        //         let values: Vec<JsValue> = node
+        //             .params
+        //             .iter()
+        //             .map(|param| self.eval_expression(&param))
+        //             .collect();
+        //
+        //         match function {
+        //             JsFunction::Ordinary(function) => {
+        //                 function
+        //                     .arguments
+        //                     .iter()
+        //                     .zip(&node.params)
+        //                     .for_each(|(arg, node)| {
+        //                         let value = self.eval_expression(&node);
+        //
+        //                         function_execution_environment
+        //                             .define_variable(arg.name.clone(), value)
+        //                             .unwrap();
+        //                     });
+        //                 self.set_environment(function_execution_environment);
+        //                 let result = function.call(self, &values);
+        //                 // println!("{result:?}");
+        //                 self.pop_environment();
+        //                 return result;
+        //             }
+        //             JsFunction::Native(function) => {
+        //                 self.set_environment(function_execution_environment);
+        //                 let result = function.call(self, &values);
+        //                 self.pop_environment();
+        //                 return result;
+        //             }
+        //         }
+        //     }
+        // }
+        //
+        // Err(format!("{} is not callable", callee.get_type_as_str()))
     }
 
     fn create_new_environment(&self) -> Environment {
-        return Environment::new(Rc::new(self.environment.clone()));
+        // println!("create_new_environment");
+        return Environment::new(Rc::clone(&self.environment.borrow().clone()));
     }
 
     fn pop_environment(&self) {
+        // println!("pop_environment");
         let parent_environment = self
             .environment
-            .borrow_mut()
+            .borrow()
+            .borrow()
             .get_parent()
             .unwrap()
             .borrow()
-            .clone();
+            .to_owned();
+
         self.set_environment(parent_environment);
     }
 
     fn eval_function_expression(&self, node: &FunctionExpressionNode) -> Result<JsValue, String> {
-        return Ok(self.create_js_function(&node.arguments, *node.body.clone()));
+        return Ok(self.create_js_function(&node.arguments, *node.body.clone()).into());
     }
 
     //    fn get_js_function_from_function_declaration_node(&self, node: &FunctionDeclarationNode,) -> JsValue {
@@ -328,10 +437,10 @@ impl Interpreter {
     //    }
 
     fn eval_function_declaration(&self, node: &FunctionDeclarationNode) -> Result<JsValue, String> {
-        let js_function_value = self.create_js_function(&node.function_signature.arguments, *node.function_signature.body.clone());
-        self.environment
+        let js_function_value: JsValue = self.create_js_function(&node.function_signature.arguments, *node.function_signature.body.clone()).into();
+        self.environment.borrow()
             .borrow_mut()
-            .define_variable(node.function_signature.name.id.clone(), js_function_value.clone())?;
+            .define_variable(node.function_signature.name.id.clone(), js_function_value.clone().into())?;
         return Ok(js_function_value);
     }
 
@@ -339,15 +448,14 @@ impl Interpreter {
         &self,
         function_arguments: &Vec<FunctionArgument>,
         body: AstStatement,
-    ) -> JsValue {
-        let mut arguments = vec![];
+    ) -> JsFunction {
+        let mut arguments = Vec::with_capacity(function_arguments.len());
 
         for fn_arg_node in function_arguments {
             let default_value = fn_arg_node
                 .default_value
                 .as_ref()
                 .map(|node| self.eval_expression(&node.as_ref()))
-                // .flatten()
                 .unwrap_or(JsValue::Undefined);
 
             arguments.push(JsFunctionArg {
@@ -359,14 +467,8 @@ impl Interpreter {
         JsFunction::ordinary_function(
             arguments,
             Box::new(body.clone()),
-            Box::new(self.environment.borrow().clone())
-        ).into()
-
-        // return JsValue::Object(Rc::new(RefCell::new(Obj::Function(Func::Js(JsFunction::new(
-        //     arguments,
-        //     Box::new(body.clone()),
-        //     Box::new(self.environment.borrow().clone())
-        // ))))));
+            self.environment.borrow().clone()
+        )
     }
 
     fn eval_assignment_expression(
@@ -379,6 +481,7 @@ impl Interpreter {
             AstExpression::Identifier(id_node) => {
                 let original_value = self
                     .environment
+                    .borrow()
                     .borrow()
                     .get_variable_value(&id_node.id);
 
@@ -402,15 +505,14 @@ impl Interpreter {
                 }
                 .unwrap();
 
-                self.environment
+                self.environment.borrow()
                     .borrow_mut()
                     .assign_variable(id_node.id.clone(), new_variable_value.clone())?;
                 return Ok(new_variable_value);
             }
             AstExpression::MemberExpression(node) => {
+                // println!("member_expression {:?}", node);
                 let object = self.eval_expression(&node.object);
-
-                println!("{:?}", object);
 
                 if let JsValue::Object(object_value) = object {
                     let mut object = object_value;
@@ -475,6 +577,7 @@ impl Interpreter {
         return self
             .environment
             .borrow()
+            .borrow()
             .get_variable_value(&node.id);
     }
 
@@ -484,8 +587,8 @@ impl Interpreter {
         } else {
             JsValue::Undefined
         };
-        return self
-            .environment
+        return self.environment
+            .borrow()
             .borrow_mut()
             .define_variable(node.id.id.clone(), value);
     }
@@ -532,8 +635,7 @@ impl Interpreter {
                     "Cannot compare value with type \"{}\" and \"{}\"",
                     evaluated_left_node.get_type_as_str(),
                     evaluated_right_node.get_type_as_str()
-                )
-                .to_string())
+                ).to_string())
             }
             BinaryOperator::Equality
             | BinaryOperator::StrictEquality
@@ -569,24 +671,18 @@ impl Interpreter {
                     (JsValue::Object(object_left), JsValue::Object(object_right)) => {
                         let value = match node.operator {
                             BinaryOperator::Equality | BinaryOperator::StrictEquality => {
-                                object_left == object_right
+                                Rc::ptr_eq(object_left, object_right)
                             }
                             BinaryOperator::Inequality | BinaryOperator::StrictInequality => {
-                                object_left != object_right
+                                !Rc::ptr_eq(object_left, object_right)
                             }
                             _ => unreachable!(),
                         };
 
                         return Ok(JsValue::Boolean(value));
-                    }
-                    _ => {
-                        return Ok(JsValue::Boolean(false));
-                        // Err(format!(
-                        //     "Cannot compare value with type \"{}\" and \"{}\"",
-                        //     evaluated_left_node.get_type_as_str(),
-                        //     evaluated_right_node.get_type_as_str()
-                        // ).to_string())
-                    }
+                    },
+                    (JsValue::Boolean(boolean_left), JsValue::Boolean(boolean_right)) => Ok(JsValue::Boolean(boolean_left == boolean_right)),
+                    _ => Ok(JsValue::Boolean(false))
                 }
             }
         }
@@ -724,9 +820,9 @@ fn get_global_environment() -> Environment {
 
 impl Default for Interpreter {
     fn default() -> Self {
-        let env = get_global_environment();
+        let environment = get_global_environment();
         Self {
-            environment: RefCell::new(env),
+            environment: RefCell::new(Rc::new(RefCell::new(environment))),
         }
     }
 }
@@ -736,8 +832,6 @@ pub fn eval_code(code: &str) -> JsValue {
 
     let ast = crate::parser::Parser::parse_code_to_ast(code)
         .expect(format!("Error occurred during parsing").as_str());
-
-    println!("{:#?}", ast);
 
     interpreter.eval_node(&ast).unwrap().unwrap()
 }
@@ -978,6 +1072,21 @@ fn object_method_this_expression() {
 }
 
 #[test]
+fn comparison() {
+    let mut interpreter = Interpreter::default();
+
+    assert_eq!(interpret(&mut interpreter, "'abc' === 'abc'"), JsValue::Boolean(true));
+    assert_eq!(interpret(&mut interpreter, "'abc' === 'qwe'"), JsValue::Boolean(false));
+    assert_eq!(interpret(&mut interpreter, "123 === 123"), JsValue::Boolean(true));
+    assert_eq!(interpret(&mut interpreter, "123 === 456"), JsValue::Boolean(false));
+    assert_eq!(interpret(&mut interpreter, "true === true"), JsValue::Boolean(true));
+    assert_eq!(interpret(&mut interpreter, "true === false"), JsValue::Boolean(false));
+    assert_eq!(interpret(&mut interpreter, "false === false"), JsValue::Boolean(true));
+    assert_eq!(eval_code("let a = {}; let b = {}; a === b;"), JsValue::Boolean(false));
+    assert_eq!(eval_code("let a = {}; let b = a; a === b;"), JsValue::Boolean(true));
+}
+
+#[test]
 fn prototype_property_access() {
     let mut interpreter = Interpreter::default();
 
@@ -1044,23 +1153,42 @@ fn two_objects_must_be_checked_for_equality_by_reference() {
     assert_eq!(eval_code(code), JsValue::Boolean(false));
 }
 
-// #[test]
-// fn simple_class_usage() {
-//     let code = "
-//        class User {
-//          constructor(name, age) {
-//             this.name = name;
-//             this.age = age;
-//          }
-//
-//          getUserInformation() {
-//             return 'Name is ' + this.name + ', ' + this.age + ' years old';
-//          }
-//        }
-//
-//        let user = new User('Anton', 26);
-//        user.getUserInformation();
-//     ";
-//     assert_eq!(eval_code(code), JsValue::String("Name is Anton, 26 years old".to_string()));
-// }
-//
+#[test]
+fn simple_class_usage() {
+    let code = "
+       class User {
+         constructor(name, age) {
+            this.name = name;
+            this.age = age;
+         }
+
+         getUserInformation() {
+            return 'Name is ' + this.name + ', ' + this.age + ' years old';
+         }
+       }
+
+       let user = new User('Anton', 26);
+       user.getUserInformation();
+    ";
+    assert_eq!(eval_code(code), JsValue::String("Name is Anton, 26 years old".to_string()));
+}
+
+#[test]
+fn prototypes_of_intances_of_same_class_equals() {
+    let mut interpreter = Interpreter::default();
+    let code = "
+       class A { constructor(a) { this.a = a; } }
+        new A();
+    ";
+    let class_instance1 = interpret(&mut interpreter, code);
+    let class_instance2 = interpret(&mut interpreter, "new A();");
+
+    if let JsValue::Object(object1) = &class_instance1 {
+        if let JsValue::Object(object2) = &class_instance2 {
+            let prototype1 = object1.borrow().get_prototype().unwrap();
+            let prototype2 = object2.borrow().get_prototype().unwrap();
+            assert!(Rc::ptr_eq(&prototype1, &prototype2));
+        }
+    }
+}
+
