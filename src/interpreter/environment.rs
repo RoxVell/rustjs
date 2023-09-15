@@ -1,10 +1,7 @@
 use std::collections::HashMap;
 use std::{cell::RefCell, rc::Rc};
-use std::fmt::{Formatter, write};
+use std::fmt::{Formatter};
 use crate::value::JsValue;
-
-// TODO: Move
-const THIS_KEYWORD: &'static str = "this";
 
 #[derive(Clone, PartialEq)]
 pub struct Environment {
@@ -68,11 +65,11 @@ impl Environment {
     }
 
     pub fn set_context(&mut self, value: JsValue) {
-        self.define_variable(THIS_KEYWORD.to_string(), value);
+        self.define_variable(crate::keywords::THIS_KEYWORD.to_string(), value);
     }
 
     pub fn get_context(&self) -> JsValue {
-        self.get_variable_value(THIS_KEYWORD)
+        self.get_variable_value(crate::keywords::THIS_KEYWORD)
     }
 
     pub fn assign_variable(&mut self, variable_name: String, value: JsValue) -> Result<(), String> {

@@ -3,6 +3,7 @@ mod node;
 mod parser;
 mod scanner;
 mod value;
+mod keywords;
 
 use crate::node::{format_ast};
 use interpreter::*;

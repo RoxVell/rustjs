@@ -1,6 +1,8 @@
 use crate::scanner::{Token, TokenKind};
 use std::fmt;
 use std::fmt::{Debug, Formatter};
+use crate::keywords::{CLASS_KEYWORD, CONST_KEYWORD, ELSE_KEYWORD, EXTENDS_KEYWORD, FOR_KEYWORD, FUNCTION_KEYWORD, IF_KEYWORD, LET_KEYWORD, NEW_KEYWORD, NULL_KEYWORD, RETURN_KEYWORD, THIS_KEYWORD, UNDEFINED_KEYWORD, WHILE_KEYWORD};
+use crate::scanner::TokenKind::{ElseKeyword, ReturnKeyword};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum AstStatement {
@@ -40,29 +42,6 @@ impl Into<AstStatement> for AstExpression {
         AstStatement::ExpressionStatement(self)
     }
 }
-
-// #[derive(Clone, PartialEq)]
-// struct NumberLiteralExpression {
-//     value: f64,
-//     token: Token,
-// }
-
-// impl TryFrom<Node> for ObjectPropertyNode {
-//     type Error = String;
-//
-//     fn try_from(value: Node) -> Result<Self, Self::Error> {
-//         match value.node {
-//             NodeKind::ObjectProperty(node) => Ok(node),
-//             _ => Err("".to_string()),
-//         }
-//     }
-// }
-
-//impl Into<NodeKind> for &StringLiteralNode {
-//    fn into(self) -> NodeKind {
-//        NodeKind::StringLiteral(*self)
-//    }
-//}
 
 #[derive(Clone, PartialEq)]
 pub struct StringLiteralNode {
@@ -286,12 +265,6 @@ impl Into<AstExpression> for IdentifierNode {
     }
 }
 
-// impl Debug for IdentifierNode {
-//     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-//         write!(f, "{}", self.id)
-//     }
-// }
-
 #[derive(Debug, Clone, PartialEq)]
 pub struct BlockStatementNode {
     pub statements: Vec<AstStatement>,
@@ -419,8 +392,8 @@ impl FormatNode for BinaryOperator {
 impl FormatNode for VariableDeclarationKind {
     fn format(&self, _: u8, _: u8) -> String {
         match self {
-            VariableDeclarationKind::Let => "let".to_string(),
-            VariableDeclarationKind::Const => "const".to_string(),
+            VariableDeclarationKind::Let => LET_KEYWORD.to_string(),
+            VariableDeclarationKind::Const => CONST_KEYWORD.to_string(),
         }
     }
 }
@@ -444,15 +417,8 @@ impl<T: FormatNode> FormatNode for Box<T> {
     }
 }
 
-// impl FormatNode for Option<Box<AstStatement>> {
-//     fn format(&self, ident: u8, level: u8) -> String {
-//         self.as_ref()
-//             .map_or("".to_string(), |x| x.node.format(ident, level))
-//     }
-// }
-
 impl FormatNode for IdentifierNode {
-    fn format(&self, ident: u8, level: u8) -> String {
+    fn format(&self, _: u8, _: u8) -> String {
         self.id.clone()
     }
 }
@@ -465,8 +431,8 @@ impl FormatNode for AstExpression {
             AstExpression::StringLiteral(node) => format!("\'{}\'", node.value),
             AstExpression::NumberLiteral(node) => format!("{}", node.value),
             AstExpression::BooleanLiteral(node) => format!("{}", node.value),
-            AstExpression::NullLiteral(_) => "null".to_string(),
-            AstExpression::UndefinedLiteral(_) => "undefined".to_string(),
+            AstExpression::NullLiteral(_) => NULL_KEYWORD.to_string(),
+            AstExpression::UndefinedLiteral(_) => UNDEFINED_KEYWORD.to_string(),
             AstExpression::Identifier(value) => format!("{}", value.id),
             AstExpression::BinaryExpression(node) => {
                 let left = node.left.format(ident, level);
@@ -502,7 +468,7 @@ impl FormatNode for AstExpression {
                 let parent_class = match &node.parent {
                     Some(node) => {
                         let parent_class_name = node.as_ref().format(ident, level);
-                        format!(" extends {parent_class_name}")
+                        format!(" {EXTENDS_KEYWORD} {parent_class_name}")
                     }
                     None => "".to_string(),
                 };
@@ -512,7 +478,7 @@ impl FormatNode for AstExpression {
                     .map(|x| format!("{}{}", whitespaces, x.format(ident, level + 1)))
                     .collect();
                 let class_body = class_body.join("\n");
-                format!("class {class_name}{parent_class} {{\n{class_body}}}\n\n")
+                format!("{CLASS_KEYWORD} {class_name}{parent_class} {{\n{class_body}}}\n\n")
             }
             AstExpression::ObjectExpression(node) => {
                 if node.properties.len() == 0 {
@@ -535,9 +501,9 @@ impl FormatNode for AstExpression {
                     .map(|x| x.format(ident, level))
                     .collect();
                 let arguments = arguments.join(", ");
-                format!("new {callee}({arguments})")
+                format!("{NEW_KEYWORD} {callee}({arguments})")
             }
-            AstExpression::ThisExpression(_) => "this".to_string(),
+            AstExpression::ThisExpression(_) => THIS_KEYWORD.to_string(),
             AstExpression::FunctionExpression(node) => {
                 let arguments_list: Vec<String> = node
                     .arguments
@@ -546,7 +512,7 @@ impl FormatNode for AstExpression {
                     .collect();
                 let arguments = arguments_list.join("\n");
                 let function_body = node.body.format(ident, level + 1);
-                format!("function({arguments}) {function_body}")
+                format!("{FUNCTION_KEYWORD}({arguments}) {function_body}")
             }
             AstExpression::CallExpression(node) => {
                 format!(
@@ -603,28 +569,28 @@ impl FormatNode for AstStatement {
             AstStatement::IfStatement(node) => {
                 let condition = node.condition.as_ref().format(ident, level);
                 let then_branch = node.then_branch.as_ref().format(ident, level);
-                let else_branch = format!("else {}", node.else_branch.format(ident, level));
+                let else_branch = format!("{ELSE_KEYWORD} {}", node.else_branch.format(ident, level));
 
-                return format!("if ({condition}) {then_branch} {else_branch}");
+                return format!("{IF_KEYWORD} ({condition}) {then_branch} {else_branch}");
             }
             AstStatement::WhileStatement(node) => {
                 let condition = node.condition.format(ident, level);
                 let body = node.body.format(ident, level);
-                return format!("while ({condition}) {body}");
+                return format!("{WHILE_KEYWORD} ({condition}) {body}");
             }
             AstStatement::ForStatement(node) => {
                 let init = node.init.format(ident, level);
                 let test = node.test.format(ident, level);
                 let update = node.update.format(ident, level);
                 let body = node.body.format(ident, level + 1);
-                return format!("for ({init} {test}; {update}) {body}");
+                return format!("{FOR_KEYWORD} ({init} {test}; {update}) {body}");
             }
             AstStatement::FunctionDeclaration(node) => {
                 let function_signature_formatted = node.function_signature.format(ident, level);
-                return format!("{whitespaces}function {function_signature_formatted}\n");
+                return format!("{whitespaces}{FUNCTION_KEYWORD} {function_signature_formatted}\n");
             }
             AstStatement::ReturnStatement(node) => {
-                return format!("return {};", node.expression.format(ident, level));
+                return format!("{RETURN_KEYWORD} {};", node.expression.format(ident, level));
             }
             AstStatement::ProgramStatement(node) => {
                 let mut result = String::new();

@@ -262,9 +262,8 @@ impl Parser {
 
         self.next_token();
 
-        if let Some(TokenKind::Identifier(id)) = self.get_current_token() {
+        if let Some(TokenKind::Identifier(_)) = self.get_current_token() {
             let id = self.parse_identifier()?;
-            // self.next_token();
 
             let value = if self.is_current_token_matches(&TokenKind::Equal) {
                 self.next_token();
