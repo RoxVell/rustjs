@@ -1,5 +1,6 @@
 use std::cell::RefCell;
-use std::fmt::{Formatter, write};
+use std::fmt::{Debug, Formatter};
+use {write};
 use std::rc::Rc;
 use crate::interpreter::{Environment, EnvironmentRef, Interpreter};
 use crate::node::{AstStatement, BlockStatementNode};
@@ -73,7 +74,7 @@ pub struct JsFunctionArg {
     pub default_value: JsValue,
 }
 
-impl std::fmt::Debug for JsFunctionArg {
+impl Debug for JsFunctionArg {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "Argument '{}' (default = {}))", self.name, self.default_value)
     }
@@ -86,8 +87,8 @@ impl Callable for OrdinaryFunction {
     }
 }
 
-impl std::fmt::Debug for NativeFunction {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl Debug for NativeFunction {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         f.write_str("native function")
     }
 }

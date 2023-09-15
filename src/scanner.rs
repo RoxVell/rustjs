@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::fmt::{Debug, Display, Formatter};
 use crate::keywords::{BREAK_KEYWORD, CATCH_KEYWORD, CLASS_KEYWORD, CONST_KEYWORD, CONTINUE_KEYWORD, DO_KEYWORD, ELSE_KEYWORD, EXPORT_KEYWORD, EXTENDS_KEYWORD, FALSE_KEYWORD, FOR_KEYWORD, FUNCTION_KEYWORD, IF_KEYWORD, IMPORT_KEYWORD, IN_KEYWORD, LET_KEYWORD, NEW_KEYWORD, NULL_KEYWORD, RETURN_KEYWORD, STATIC_KEYWORD, SUPER_KEYWORD, SWITCH_KEYWORD, THIS_KEYWORD, THROW_KEYWORD, TRUE_KEYWORD, TRY_KEYWORD, UNDEFINED_KEYWORD, WHILE_KEYWORD, YIELD_KEYWORD};
-use crate::scanner::TokenKind::{DoKeyword, ElseKeyword, ForKeyword, IfKeyword, WhileKeyword};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum TokenKind {
@@ -146,10 +145,10 @@ impl TokenKind {
             TokenKind::Exclamatory => "!".to_string(),
             TokenKind::FunctionKeyword => FUNCTION_KEYWORD.to_string(),
             TokenKind::IfKeyword => IF_KEYWORD.to_string(),
-            TokenKind::ElseKeyword => ElseKeyword.to_string(),
-            TokenKind::WhileKeyword => WhileKeyword.to_string(),
-            TokenKind::DoKeyword => DoKeyword.to_string(),
-            TokenKind::ForKeyword => ForKeyword.to_string(),
+            TokenKind::ElseKeyword => ELSE_KEYWORD.to_string(),
+            TokenKind::WhileKeyword => WHILE_KEYWORD.to_string(),
+            TokenKind::DoKeyword => DO_KEYWORD.to_string(),
+            TokenKind::ForKeyword => FOR_KEYWORD.to_string(),
             TokenKind::InKeyword => IN_KEYWORD.to_string(),
             TokenKind::ClassKeyword => CLASS_KEYWORD.to_string(),
             TokenKind::ExtendsKeyword => EXTENDS_KEYWORD.to_string(),
@@ -182,7 +181,7 @@ impl TokenKind {
 }
 
 impl Display for TokenKind {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         write!(f, "{:?}", self)
     }
 }

@@ -1,8 +1,5 @@
-use std::collections::HashMap;
-use std::fmt::format;
-
 use crate::node::*;
-use crate::scanner::{Scanner, Span, TokenKind, Token};
+use crate::scanner::{Scanner, TokenKind, Token};
 use ariadne::{ColorGenerator, Label, Report, ReportKind, Source};
 
 pub struct Parser {
@@ -50,10 +47,6 @@ impl Parser {
         return Ok(
             AstStatement::ProgramStatement(ProgramNode { statements }),
         );
-    }
-
-    fn get_start_span(&mut self) -> Span {
-        self.current_token.as_ref().unwrap().span.start
     }
 
     fn parse_statement(&mut self) -> Result<AstStatement, String> {
@@ -575,7 +568,7 @@ impl Parser {
                 self.eat(&TokenKind::CloseSquareBracket);
                 return Ok((true, expression));
             }
-            Some(TokenKind::Identifier(node)) => Ok((false, self.parse_identifier()?.into())),
+            Some(TokenKind::Identifier(_)) => Ok((false, self.parse_identifier()?.into())),
             Some(TokenKind::String(_)) => Ok((false, self.parse_string_literal()?)),
             Some(TokenKind::Number(_)) => Ok((false, self.parse_number_literal()?)),
             _ => Err(format!(

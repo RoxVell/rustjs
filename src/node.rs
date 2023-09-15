@@ -2,7 +2,6 @@ use crate::scanner::{Token, TokenKind};
 use std::fmt;
 use std::fmt::{Debug, Formatter};
 use crate::keywords::{CLASS_KEYWORD, CONST_KEYWORD, ELSE_KEYWORD, EXTENDS_KEYWORD, FOR_KEYWORD, FUNCTION_KEYWORD, IF_KEYWORD, LET_KEYWORD, NEW_KEYWORD, NULL_KEYWORD, RETURN_KEYWORD, THIS_KEYWORD, UNDEFINED_KEYWORD, WHILE_KEYWORD};
-use crate::scanner::TokenKind::{ElseKeyword, ReturnKeyword};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum AstStatement {

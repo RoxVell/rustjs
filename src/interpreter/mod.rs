@@ -1,13 +1,10 @@
 use std::{cell::RefCell, rc::Rc};
-use std::cell::Cell;
-
 use crate::node::*;
 mod environment;
 pub use environment::{Environment, EnvironmentRef};
-// use crate::interpreter::environment::EnvironmentRef;
 use crate::value::{JsValue};
 use crate::value::function::{JsFunction, JsFunctionArg, Callable};
-use crate::value::object::{JsObject, JsObjectRef, ObjectKind};
+use crate::value::object::{JsObject, ObjectKind};
 
 const CONSTRUCTOR_METHOD_NAME: &'static str = "constructor";
 
@@ -156,10 +153,6 @@ impl Interpreter {
         return Ok(object_value.into());
     }
 
-    fn eval_object_property(&self, node: &ObjectPropertyNode) -> JsValue {
-        return self.eval_expression(&node.value);
-    }
-
     /// In js a class is a function that gets `this` as variable when called with new keyword
     /// To do this we need:
     ///     1. construct a function from a constructor method
@@ -245,7 +238,7 @@ impl Interpreter {
         &self,
         node: &ConditionalExpressionNode,
     ) -> JsValue {
-        let test = self.eval_expression(&node.test);;
+        let test = self.eval_expression(&node.test);
 
         let branch = if test.to_bool() {
             &node.consequent
@@ -295,7 +288,7 @@ impl Interpreter {
                 // println!("expr {callee:?}");
 
                 if let AstExpression::MemberExpression(expr) = &callee {
-                    function_execution_environment.set_context(self.eval_expression(&expr.object));;
+                    function_execution_environment.set_context(self.eval_expression(&expr.object));
                 }
 
                 // TODO: refactor, ugly as hell
@@ -410,12 +403,10 @@ impl Interpreter {
     }
 
     fn create_new_environment(&self) -> Environment {
-        // println!("create_new_environment");
         return Environment::new(Rc::clone(&self.environment.borrow().clone()));
     }
 
     fn pop_environment(&self) {
-        // println!("pop_environment");
         let parent_environment = self
             .environment
             .borrow()
@@ -431,10 +422,6 @@ impl Interpreter {
     fn eval_function_expression(&self, node: &FunctionExpressionNode) -> Result<JsValue, String> {
         return Ok(self.create_js_function(&node.arguments, *node.body.clone()).into());
     }
-
-    //    fn get_js_function_from_function_declaration_node(&self, node: &FunctionDeclarationNode,) -> JsValue {
-    //        return self.create_js_function(&node.arguments, *node.body.clone());
-    //    }
 
     fn eval_function_declaration(&self, node: &FunctionDeclarationNode) -> Result<JsValue, String> {
         let js_function_value: JsValue = self.create_js_function(&node.function_signature.arguments, *node.function_signature.body.clone()).into();
@@ -511,11 +498,10 @@ impl Interpreter {
                 return Ok(new_variable_value);
             }
             AstExpression::MemberExpression(node) => {
-                // println!("member_expression {:?}", node);
                 let object = self.eval_expression(&node.object);
 
                 if let JsValue::Object(object_value) = object {
-                    let mut object = object_value;
+                    let object = object_value;
 
                     let key =
                         self.eval_member_expression_key(&node.property, node.computed)?;
@@ -535,24 +521,6 @@ impl Interpreter {
         }
     }
 
-    // fn get_member_expression_key(&self, node: &AstStatement) -> Result<String, String> {
-    //     match &node {
-    //         AstExpression::Identifier(node) => Ok(node.id.clone()),
-    //         node => {
-    //             let evaluated_node = self.eval_node(&node)?.unwrap();
-    //
-    //             match evaluated_node {
-    //                 JsValue::String(value) => Ok(value),
-    //                 JsValue::Number(value) => Ok(value.to_string()),
-    //                 value => Err(format!(
-    //                     "Type {} cannot be used as an object key",
-    //                     value.get_type_as_str()
-    //                 )),
-    //             }
-    //         }
-    //     }
-    // }
-
     fn eval_while_statement(&self, node: &WhileStatementNode) {
         while self.eval_expression(&node.condition).to_bool() {
             self.eval_node(&node.body.as_ref()).unwrap();
@@ -566,7 +534,7 @@ impl Interpreter {
             self.eval_node(&node.then_branch.as_ref()).unwrap();
             return Ok(());
         } else if let Some(node) = node.else_branch.as_ref() {
-            self.eval_node(&node);
+            self.eval_node(&node).unwrap();
             return Ok(());
         }
 
@@ -743,7 +711,7 @@ impl Interpreter {
 }
 
 fn get_global_environment() -> Environment {
-    fn console_log(interpreter: &Interpreter, arguments: &Vec<JsValue>) -> Result<JsValue, String> {
+    fn console_log(_: &Interpreter, arguments: &Vec<JsValue>) -> Result<JsValue, String> {
         let result = arguments
             .iter()
             .map(|arg| format!("{}", arg))
@@ -754,7 +722,7 @@ fn get_global_environment() -> Environment {
     }
 
     fn set_prototype(
-        interpreter: &Interpreter,
+        _: &Interpreter,
         arguments: &Vec<JsValue>,
     ) -> Result<JsValue, String> {
         let target = arguments
@@ -786,10 +754,7 @@ fn get_global_environment() -> Environment {
         return Ok(JsValue::Undefined);
     }
 
-    fn performance_now(
-        interpreter: &Interpreter,
-        arguments: &Vec<JsValue>,
-    ) -> Result<JsValue, String> {
+    fn performance_now(_: &Interpreter, _: &Vec<JsValue>) -> Result<JsValue, String> {
         return Ok(JsValue::Number(
             std::time::SystemTime::now()
                 .duration_since( std::time::SystemTime::UNIX_EPOCH)
@@ -849,7 +814,7 @@ fn get_variable_value_from_parent_environment() {
     let variable_value = JsValue::Number(123.0);
 
     let mut parent_env = Environment::default();
-    parent_env.define_variable(variable_name.to_string(), variable_value.clone());
+    parent_env.define_variable(variable_name.to_string(), variable_value.clone()).unwrap();
 
     let child_env = Environment::new(Rc::new(RefCell::new(parent_env)));
     let value_from_parent_env = child_env.get_variable_value(variable_name);

@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::{cell::RefCell, rc::Rc};
 use std::fmt::{Formatter};
+use crate::keywords::THIS_KEYWORD;
 use crate::value::JsValue;
 
 #[derive(Clone, PartialEq)]
@@ -51,7 +52,7 @@ impl Environment {
 
     pub fn define_variable(&mut self, variable_name: String, value: JsValue) -> Result<(), String> {
         if self.variables.contains_key(&variable_name) {
-            return Err(format!("Error with name {variable_name} already defined"));
+            return Err(format!("Error with name {variable_name} is already defined"));
         }
 
         self.variables.insert(variable_name.clone(), value.clone());
@@ -65,11 +66,11 @@ impl Environment {
     }
 
     pub fn set_context(&mut self, value: JsValue) {
-        self.define_variable(crate::keywords::THIS_KEYWORD.to_string(), value);
+        self.define_variable(THIS_KEYWORD.to_string(), value).unwrap();
     }
 
     pub fn get_context(&self) -> JsValue {
-        self.get_variable_value(crate::keywords::THIS_KEYWORD)
+        self.get_variable_value(THIS_KEYWORD)
     }
 
     pub fn assign_variable(&mut self, variable_name: String, value: JsValue) -> Result<(), String> {
