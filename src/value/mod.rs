@@ -161,13 +161,28 @@ impl Display for JsValue {
             JsValue::Boolean(value) => write!(f, "\x1b[35m{}\x1b[0m", if *value { "true" } else { "false" }),
             JsValue::Object(object) => {
                 match &object.borrow().kind {
-                    ObjectKind::Ordinary => write!(f, "[object Object]"),
+                    ObjectKind::Ordinary => {
+                        let result: Vec<String> = object.borrow().properties
+                            .iter()
+                            .map(|(key, value)| format!("{key}: {value}"))
+                            .collect();
+                        let result = result.join(", ");
+                        write!(f, "{{ {result} }}")
+                    },
                     ObjectKind::Function(function) => {
                         match function {
                             JsFunction::Ordinary(_) => write!(f, "[function]"),
                             JsFunction::Native(_) => write!(f, "[native function]"),
                         }
                     },
+                    ObjectKind::Array => {
+                        let result: Vec<String> = object.borrow().properties
+                            .values()
+                            .map(|x| format!("{x}"))
+                            .collect();
+                        let result = result.join(", ");
+                        write!(f, "[{result}]")
+                    }
                 }
             },
         }

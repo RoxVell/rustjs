@@ -63,9 +63,15 @@ impl Interpreter {
             AstExpression::UndefinedLiteral(_) => Ok(JsValue::Undefined),
             AstExpression::BooleanLiteral(node) => Ok(JsValue::Boolean(node.value)),
             AstExpression::BinaryExpression(node) => self.eval_binary_expression(node),
+            AstExpression::ArrayExpression(node) => self.eval_array_expression(node),
         };
 
         value.unwrap()
+    }
+
+    fn eval_array_expression(&self, node: &ArrayExpressionNode) -> Result<JsValue, String> {
+        let array_items: Vec<JsValue> = node.items.iter().map(|x| self.eval_expression(x)).collect();
+        return Ok(JsObject::array(array_items).to_js_value());
     }
 
     fn eval_this_expression(&self) -> JsValue {
@@ -757,6 +763,45 @@ fn get_global_environment() -> Environment {
         ));
     }
 
+    fn object_keys(_: &Interpreter, args: &Vec<JsValue>) -> Result<JsValue, String> {
+        assert_eq!(args.len(), 1);
+
+        if let JsValue::Object(object) = &args[0] {
+            let keys: Vec<JsValue> = object.borrow().properties.keys().map(|x| JsValue::String(x.clone())).collect();
+            return Ok(JsValue::Object(JsObject::array(keys).to_ref()));
+        }
+
+        return Err("First arguments should be an object".to_string());
+    }
+
+    fn object_values(_: &Interpreter, args: &Vec<JsValue>) -> Result<JsValue, String> {
+        assert_eq!(args.len(), 1);
+
+        if let JsValue::Object(object) = &args[0] {
+            let values: Vec<JsValue> = object.borrow().properties.values().map(|x| x.clone()).collect();
+            return Ok(JsValue::Object(JsObject::array(values).to_ref()));
+        }
+
+        return Err("First arguments should be an object".to_string());
+    }
+
+    fn object_entries(_: &Interpreter, args: &Vec<JsValue>) -> Result<JsValue, String> {
+        assert_eq!(args.len(), 1);
+
+        if let JsValue::Object(object) = &args[0] {
+            let properties = &object.borrow().properties;
+            let values: Vec<JsValue> = properties.keys()
+                .zip(properties.values())
+                .map(|(key, value)| {
+                    JsObject::array(vec![JsValue::String(key.clone()), value.clone()]).to_js_value()
+                })
+                .collect();
+            return Ok(JsValue::Object(JsObject::array(values).to_ref()));
+        }
+
+        return Err("First arguments should be an object".to_string());
+    }
+
     Environment::new_with_variables([
         (
             "console".to_string(),
@@ -774,6 +819,14 @@ fn get_global_environment() -> Environment {
                 ("now".to_string(), JsValue::native_function(performance_now))
             ]),
         ),
+        (
+            "Object".to_string(),
+            JsValue::object([
+                ("keys".to_string(), JsValue::native_function(object_keys)),
+                ("values".to_string(), JsValue::native_function(object_values)),
+                ("entries".to_string(), JsValue::native_function(object_entries)),
+            ]),
+        )
     ])
 }
 

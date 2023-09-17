@@ -34,12 +34,18 @@ pub enum AstExpression {
     NewExpression(NewExpressionNode),
     ObjectExpression(ObjectExpressionNode),
     ClassDeclaration(ClassDeclarationNode),
+    ArrayExpression(ArrayExpressionNode),
 }
 
 impl Into<AstStatement> for AstExpression {
     fn into(self) -> AstStatement {
         AstStatement::ExpressionStatement(self)
     }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ArrayExpressionNode {
+  pub items: Vec<AstExpression>,
 }
 
 #[derive(Clone, PartialEq)]
@@ -524,6 +530,7 @@ impl FormatNode for AstExpression {
                         .join(", ")
                 )
             }
+            AstExpression::ArrayExpression(_) => todo!()
         }
     }
 }

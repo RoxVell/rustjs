@@ -466,6 +466,7 @@ impl Parser {
     fn parse_primary_expression(&mut self) -> Result<AstExpression, String> {
         match self.get_current_token() {
             Some(TokenKind::ClassKeyword) => return self.parse_class_expression(),
+            Some(TokenKind::OpenSquareBracket) => return self.parse_array_expression(),
             Some(TokenKind::FunctionKeyword) => return self.parse_function_expression(),
             Some(TokenKind::Number(_)) => return self.parse_number_literal(),
             Some(TokenKind::String(_)) => return self.parse_string_literal(),
@@ -496,6 +497,13 @@ impl Parser {
                 unimplemented!()
             }
         }
+    }
+
+    fn parse_array_expression(&mut self) -> Result<AstExpression, String> {
+        self.eat(&TokenKind::OpenSquareBracket);
+        let items: Vec<AstExpression> = self.parse_comma_sequence(&TokenKind::CloseSquareBracket, &Self::parse_primary_expression)?.into_iter().collect();
+        self.eat(&TokenKind::CloseSquareBracket);
+        Ok(AstExpression::ArrayExpression(ArrayExpressionNode { items }))
     }
 
     fn parse_function_expression(&mut self) -> Result<AstExpression, String> {

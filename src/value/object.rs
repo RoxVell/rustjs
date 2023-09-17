@@ -25,6 +25,7 @@ pub type JsObjectRef = Rc<RefCell<JsObject>>;
 pub enum ObjectKind {
     Ordinary,
     Function(JsFunction),
+    Array,
 }
 
 impl JsObject {
@@ -48,6 +49,14 @@ impl JsObject {
 
     pub fn empty_ref() -> JsObjectRef {
         Self::new(ObjectKind::Ordinary, []).to_ref()
+    }
+
+    pub fn array(properties: Vec<JsValue>) -> Self {
+        let properties_with_keys: HashMap<String, JsValue> = properties
+            .into_iter()
+            .enumerate()
+            .map(|(i, x)| (i.to_string(), x)).collect();
+        Self::new(ObjectKind::Array, properties_with_keys)
     }
 
     pub fn set_proto(&mut self, prototype: JsObjectRef) {
@@ -89,10 +98,14 @@ impl JsObject {
     pub fn is_object(&self) -> bool {
         matches!(self.kind, ObjectKind::Ordinary)
     }
+
+    pub fn to_js_value(self) -> JsValue {
+        JsValue::Object(Rc::new(RefCell::new(self)))
+    }
 }
 
 impl Into<JsValue> for JsObject {
     fn into(self) -> JsValue {
-        JsValue::Object(Rc::new(RefCell::new(self)))
+        self.to_js_value()
     }
 }
