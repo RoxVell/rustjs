@@ -8,8 +8,16 @@ use crate::value::JsValue;
 pub struct JsObject {
     pub kind: ObjectKind,
     pub properties: HashMap<String, JsValue>,
-    pub prototype: Option<JsObjectRef>,
+    /// property of function-constructors, that object will be a __proto__ of creating object
+    prototype: Option<JsObjectRef>,
+    __proto__: Option<JsObjectRef>,
 }
+
+// impl Drop for JsObject {
+//     fn drop(&mut self) {
+//         println!("object was destroyed, {:?}", self);
+//     }
+// }
 
 pub type JsObjectRef = Rc<RefCell<JsObject>>;
 
@@ -20,11 +28,12 @@ pub enum ObjectKind {
 }
 
 impl JsObject {
-    pub fn new<T: Into<HashMap<String, JsValue>>>(kind: ObjectKind, properties: T, prototype: Option<JsObjectRef>) -> Self {
+    pub fn new<T: Into<HashMap<String, JsValue>>>(kind: ObjectKind, properties: T) -> Self {
         Self {
             kind,
             properties: properties.into(),
-            prototype,
+            prototype: None,
+            __proto__: None,
         }
     }
 
@@ -34,7 +43,19 @@ impl JsObject {
 
     /// Creates an empty object with no properties & no prototype
     pub fn empty() -> Self {
-        Self::new(ObjectKind::Ordinary, [], None)
+        Self::new(ObjectKind::Ordinary, [])
+    }
+
+    pub fn empty_ref() -> JsObjectRef {
+        Self::new(ObjectKind::Ordinary, []).to_ref()
+    }
+
+    pub fn set_proto(&mut self, prototype: JsObjectRef) {
+        self.__proto__ = Some(prototype);
+    }
+
+    pub fn get_proto(&self) -> Option<JsObjectRef> {
+        self.__proto__.clone()
     }
 
     pub fn set_prototype(&mut self, prototype: JsObjectRef) {
@@ -54,8 +75,8 @@ impl JsObject {
             return self.properties.get(key).map_or(JsValue::Undefined, |x| x.clone());
         }
 
-        if self.prototype.is_some() {
-            return self.prototype.as_ref().unwrap().borrow().get_property_value(key);
+        if self.__proto__.is_some() {
+            return self.__proto__.as_ref().unwrap().borrow().get_property_value(key);
         }
 
         return JsValue::Undefined;

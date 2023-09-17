@@ -31,8 +31,8 @@ impl JsValue {
         JsFunction::native_function(function).into()
     }
 
-    pub fn object<T: Into<HashMap<String, JsValue>>>(properties: T, prototype: Option<JsObjectRef>) -> Self {
-        JsObject::new(ObjectKind::Ordinary, properties, prototype).into()
+    pub fn object<T: Into<HashMap<String, JsValue>>>(properties: T) -> Self {
+        JsObject::new(ObjectKind::Ordinary, properties).into()
     }
 
     pub fn get_type_as_str(&self) -> String {

@@ -82,12 +82,6 @@ impl Interpreter {
 
         let result = self.call_function(node.callee.as_ref(), node.arguments.as_ref(), true);
 
-        // if let JsValue::Object(object) = &result {
-        //     object.borrow_mut().set_prototype()
-        // }
-        // println!("{result:?}");
-
-        // println!("{callee:?}");
         result
     }
 
@@ -319,12 +313,12 @@ impl Interpreter {
 
                         if let JsValue::Object(result_object) = result.as_ref().unwrap() {
                             {
-                                let prototype = object.borrow().get_prototype();
+                                let proto = object.borrow().get_prototype();
 
-                                match prototype {
+                                match proto {
                                     None => {}
                                     Some(proto) => {
-                                        result_object.borrow_mut().set_prototype(proto);
+                                        result_object.borrow_mut().set_proto(proto);
                                     }
                                 }
                             }
@@ -737,7 +731,7 @@ fn get_global_environment() -> Environment {
             if let JsValue::Object(prototype_obj) = prototype {
                 target_obj
                     .borrow_mut()
-                    .set_prototype(prototype_obj.clone());
+                    .set_proto(prototype_obj.clone());
             } else {
                 return Err(format!(
                     "Second arguments should be of type object, but got: {}",
@@ -768,7 +762,7 @@ fn get_global_environment() -> Environment {
             "console".to_string(),
             JsValue::object([
                 ("log".to_string(), JsValue::native_function(console_log)),
-            ], None),
+            ]),
         ),
         (
             "setPrototypeOf".to_string(),
@@ -778,7 +772,7 @@ fn get_global_environment() -> Environment {
             "performance".to_string(),
             JsValue::object([
                 ("now".to_string(), JsValue::native_function(performance_now))
-            ], None),
+            ]),
         ),
     ])
 }
@@ -941,7 +935,7 @@ fn object_expression_works() {
             "hello 123".to_string(),
             JsValue::String("hello 123".to_string()),
         ),
-    ], None);
+    ]);
 
     assert_eq!(interpret(&mut interpreter, code), expected);
     assert_eq!(interpret(&mut interpreter, "a[5];"), JsValue::Number(5.0));
@@ -1139,7 +1133,40 @@ fn simple_class_usage() {
 }
 
 #[test]
-fn prototypes_of_intances_of_same_class_equals() {
+fn class_proto_of_instance_should_be_equal_to_class_prototype() {
+    let mut interpreter = Interpreter::default();
+
+    let code = "
+       class User {
+         constructor(name, age) {
+            this.name = name;
+            this.age = age;
+         }
+
+         getUserInformation() {
+            return 'Name is ' + this.name + ', ' + this.age + ' years old';
+         }
+       }
+
+       let user = new User('Anton', 26);
+       user.getUserInformation();
+    ";
+    interpret(&mut interpreter, code);
+    let class = interpreter.environment.borrow().borrow().get_variable_value("User");
+    let class_instance = interpreter.environment.borrow().borrow().get_variable_value("user");
+
+    if let JsValue::Object(class_object) = &class {
+        if let JsValue::Object(instance_object) = &class_instance {
+            let class_prototype = class_object.borrow().get_prototype().unwrap();
+            let class_instance_proto = instance_object.borrow().get_proto().unwrap();
+
+            assert!(Rc::ptr_eq(&class_prototype, &class_instance_proto));
+        }
+    }
+}
+
+#[test]
+fn prototypes_of_instances_of_same_class_equals() {
     let mut interpreter = Interpreter::default();
     let code = "
        class A { constructor(a) { this.a = a; } }
@@ -1150,8 +1177,8 @@ fn prototypes_of_intances_of_same_class_equals() {
 
     if let JsValue::Object(object1) = &class_instance1 {
         if let JsValue::Object(object2) = &class_instance2 {
-            let prototype1 = object1.borrow().get_prototype().unwrap();
-            let prototype2 = object2.borrow().get_prototype().unwrap();
+            let prototype1 = object1.borrow().get_proto().unwrap();
+            let prototype2 = object2.borrow().get_proto().unwrap();
             assert!(Rc::ptr_eq(&prototype1, &prototype2));
         }
     }

@@ -1,6 +1,5 @@
 use std::cell::RefCell;
 use std::fmt::{Debug, Formatter};
-use {write};
 use std::rc::Rc;
 use crate::interpreter::{Environment, EnvironmentRef, Interpreter};
 use crate::node::{AstStatement, BlockStatementNode};
@@ -23,7 +22,7 @@ impl JsFunction {
     }
 
     pub fn to_object(self) -> JsObject {
-        JsObject::new(ObjectKind::Function(self), [], None)
+        JsObject::new(ObjectKind::Function(self), [])
     }
 
     pub fn empty() -> Self {
@@ -33,7 +32,7 @@ impl JsFunction {
 
 impl Into<JsValue> for JsFunction {
     fn into(self) -> JsValue {
-        JsValue::Object(JsObject { kind: ObjectKind::Function(self), properties: Default::default(), prototype: None }.to_ref())
+        JsValue::Object(JsObject::new(ObjectKind::Function(self), []).to_ref())
     }
 }
 
