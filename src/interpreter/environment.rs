@@ -7,7 +7,7 @@ use crate::value::JsValue;
 #[derive(Clone, PartialEq)]
 pub struct Environment {
     parent: Option<Rc<RefCell<Environment>>>,
-    variables: HashMap<String, JsValue>,
+    variables: HashMap<String, (bool, JsValue)>,
 }
 
 impl std::fmt::Debug for Environment {
@@ -35,10 +35,10 @@ impl Environment {
         }
     }
 
-    pub fn new_with_variables<T: Into<HashMap<String, JsValue>>>(variables: T) -> Self {
+    pub fn new_with_variables<T: Into<HashMap<String, (bool, JsValue)>>>(variables: T) -> Self {
         Self {
             parent: None,
-            variables: variables.into()
+            variables: variables.into(),
         }
     }
 
@@ -50,12 +50,12 @@ impl Environment {
         self.parent.as_ref().map(|x| Rc::clone(x))
     }
 
-    pub fn define_variable(&mut self, variable_name: String, value: JsValue) -> Result<(), String> {
+    pub fn define_variable(&mut self, variable_name: String, value: JsValue, is_const: bool) -> Result<(), String> {
         if self.variables.contains_key(&variable_name) {
-            return Err(format!("Error with name {variable_name} already defined"));
+            return Err(format!("Variable with name '{variable_name}' already defined"));
         }
 
-        self.variables.insert(variable_name.clone(), value.clone());
+        self.variables.insert(variable_name.clone(), (is_const, value.clone()));
 
         // println!(
         //     "Defined new variable {} = {:#?} Variables: {:#?} Parent: {:#?}",
@@ -66,7 +66,7 @@ impl Environment {
     }
 
     pub fn set_context(&mut self, value: JsValue) {
-        self.define_variable(THIS_KEYWORD.to_string(), value).unwrap();
+        self.define_variable(THIS_KEYWORD.to_string(), value, true).unwrap();
     }
 
     pub fn get_context(&self) -> JsValue {
@@ -75,7 +75,13 @@ impl Environment {
 
     pub fn assign_variable(&mut self, variable_name: String, value: JsValue) -> Result<(), String> {
         if self.variables.contains_key(&variable_name) {
-            self.variables.insert(variable_name.clone(), value);
+            let (is_const, _) = self.variables.get(&variable_name).unwrap();
+
+            if *is_const {
+                return Err("Assignment to constant variable.".to_string());
+            }
+
+            self.variables.insert(variable_name.clone(), (*is_const, value));
             return Ok(());
         }
 
@@ -84,18 +90,15 @@ impl Environment {
         }
 
         if !self.variables.contains_key(&variable_name) {
-            return Err(format!("Variable \"{variable_name}\" is not defined"));
+            return Err(format!("Variable '{variable_name}' is not defined"));
         }
-
-        // TODO: throw an error while assigning value to constant
-        self.variables.insert(variable_name.clone(), value);
 
         return Ok(());
     }
 
     pub fn get_variable_value(&self, variable_name: &str) -> JsValue {
         if self.variables.contains_key(variable_name) {
-            return self.variables.get(variable_name).map_or(JsValue::Undefined, |x| x.clone());
+            return self.variables.get(variable_name).map_or(JsValue::Undefined, |(_, x)| x.clone());
         } else {
             return self
                 .parent

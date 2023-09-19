@@ -7,7 +7,7 @@ Simple js engine implemented in Rust
 ## Javascript features
 
 ### Common
-- [ ] Const variables
+- [x] Const variables
 - [ ] Array objects
 
 ### Class

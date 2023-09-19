@@ -177,7 +177,8 @@ impl Interpreter {
 
         self.environment.borrow().borrow_mut().define_variable(
             node.name.id.clone(),
-            constructor_function.clone()
+            constructor_function.clone(),
+            false
         ).unwrap();
 
         Ok(constructor_function)
@@ -297,7 +298,7 @@ impl Interpreter {
                                 let value = self.eval_expression(&node);
 
                                 function_execution_environment
-                                    .define_variable(arg.name.clone(), value)
+                                    .define_variable(arg.name.clone(), value, false)
                                     .unwrap();
                             });
                         self.set_environment(function_execution_environment);
@@ -416,7 +417,7 @@ impl Interpreter {
 
         self.environment.borrow()
             .borrow_mut()
-            .define_variable(node.function_signature.name.id.clone(), js_function_value.clone().into())?;
+            .define_variable(node.function_signature.name.id.clone(), js_function_value.clone().into(), false)?;
         return Ok(js_function_value);
     }
 
@@ -545,7 +546,7 @@ impl Interpreter {
         return self.environment
             .borrow()
             .borrow_mut()
-            .define_variable(node.id.id.clone(), value);
+            .define_variable(node.id.id.clone(), value, matches!(&node.kind, VariableDeclarationKind::Const));
     }
 
     fn eval_binary_expression(&self, node: &BinaryExpressionNode) -> Result<JsValue, String> {
@@ -792,27 +793,27 @@ fn get_global_environment() -> Environment {
     Environment::new_with_variables([
         (
             "console".to_string(),
-            JsValue::object([
+            (true, JsValue::object([
                 ("log".to_string(), JsValue::native_function(console_log)),
-            ]),
+            ])),
         ),
         (
             "setPrototypeOf".to_string(),
-            JsValue::native_function(set_prototype),
+            (true, JsValue::native_function(set_prototype),)
         ),
         (
             "performance".to_string(),
-            JsValue::object([
+            (true, JsValue::object([
                 ("now".to_string(), JsValue::native_function(performance_now))
-            ]),
+            ]),)
         ),
         (
             "Object".to_string(),
-            JsValue::object([
+            (true, JsValue::object([
                 ("keys".to_string(), JsValue::native_function(object_keys)),
                 ("values".to_string(), JsValue::native_function(object_values)),
                 ("entries".to_string(), JsValue::native_function(object_entries)),
-            ]),
+            ])),
         )
     ])
 }
@@ -848,7 +849,7 @@ fn get_variable_value_from_parent_environment() {
     let variable_value = JsValue::Number(123.0);
 
     let mut parent_env = Environment::default();
-    parent_env.define_variable(variable_name.to_string(), variable_value.clone()).unwrap();
+    parent_env.define_variable(variable_name.to_string(), variable_value.clone(), false).unwrap();
 
     let child_env = Environment::new(Rc::new(RefCell::new(parent_env)));
     let value_from_parent_env = child_env.get_variable_value(variable_name);
@@ -1244,4 +1245,14 @@ fn function_constructor_as_class() {
         user.getUserInformation();
     ";
     assert_eq!(eval_code(code), JsValue::String("Name is Anton, 26 years old".to_string()));
+}
+
+#[test]
+#[should_panic(expected = "Assignment to constant variable.")]
+fn attempt_to_reassign_constant_variable_should_error() {
+    let code = "
+        const a = 5;
+        a = 10;
+    ";
+    eval_code(code);
 }
