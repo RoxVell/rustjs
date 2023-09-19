@@ -52,7 +52,7 @@ impl Environment {
 
     pub fn define_variable(&mut self, variable_name: String, value: JsValue) -> Result<(), String> {
         if self.variables.contains_key(&variable_name) {
-            return Err(format!("Error with name {variable_name} is already defined"));
+            return Err(format!("Error with name {variable_name} already defined"));
         }
 
         self.variables.insert(variable_name.clone(), value.clone());

@@ -4,20 +4,14 @@ use std::rc::Rc;
 use crate::value::function::{JsFunction};
 use crate::value::JsValue;
 
+const PROTOTYPE_PROPERTY: &'static str = "prototype";
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct JsObject {
     pub kind: ObjectKind,
     pub properties: HashMap<String, JsValue>,
-    /// property of function-constructors, that object will be a __proto__ of creating object
-    prototype: Option<JsObjectRef>,
     __proto__: Option<JsObjectRef>,
 }
-
-// impl Drop for JsObject {
-//     fn drop(&mut self) {
-//         println!("object was destroyed, {:?}", self);
-//     }
-// }
 
 pub type JsObjectRef = Rc<RefCell<JsObject>>;
 
@@ -33,7 +27,6 @@ impl JsObject {
         Self {
             kind,
             properties: properties.into(),
-            prototype: None,
             __proto__: None,
         }
     }
@@ -68,11 +61,11 @@ impl JsObject {
     }
 
     pub fn set_prototype(&mut self, prototype: JsObjectRef) {
-        self.prototype = Some(prototype);
+        self.add_property(PROTOTYPE_PROPERTY, JsValue::Object(prototype))
     }
 
-    pub fn get_prototype(&self) -> Option<JsObjectRef> {
-        self.prototype.clone()
+    pub fn get_prototype(&self) -> JsValue {
+        self.get_property_value(PROTOTYPE_PROPERTY)
     }
 
     pub fn add_property(&mut self, key: &str, value: JsValue) {

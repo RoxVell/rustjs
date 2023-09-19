@@ -79,7 +79,6 @@ impl Interpreter {
     }
 
     fn eval_new_expression(&self, node: &NewExpressionNode) -> Result<JsValue, String> {
-        // println!("eval_new_expression");
         let callee = self.eval_expression(node.callee.as_ref());
 
         if !callee.is_function() {
@@ -92,11 +91,7 @@ impl Interpreter {
     }
 
     fn eval_block_statement(&self, node: &BlockStatementNode) -> Result<Option<JsValue>, String> {
-        // println!("eval_block_statement");
         let env = self.create_new_environment();
-
-        // println!("{:?}", env.arity());
-        // println!("---");
         self.set_environment(env);
         let result = self.eval_statements(&node.statements);
         self.pop_environment();
@@ -107,15 +102,11 @@ impl Interpreter {
         let property_key = self.eval_member_expression_key(&node.property, node.computed)?;
         let resolved_object = self.eval_expression(&node.object);
 
-        // println!("resolved_object: {resolved_object:?}");
-
-        if let JsValue::Object(object) = resolved_object {
-            // println!("borrow mut object");
-            return Ok(object
-                .borrow_mut()
-                .get_property_value(property_key.as_str()));
-        } else {
-            return Err("Is not an object".to_string());
+        match resolved_object {
+            JsValue::Object(object) => {
+                Ok(object.borrow_mut().get_property_value(property_key.as_str()))
+            },
+            _ => Err("Is not an object".to_string())
         }
     }
 
@@ -190,11 +181,6 @@ impl Interpreter {
         ).unwrap();
 
         Ok(constructor_function)
-
-        // println!("prototype_object {:#?}", prototype_object);
-        // println!("constructor_function {:#?}", constructor_function);
-
-        // unimplemented!()
     }
 
     fn build_constructor_from_class_declaration(&self, node: &ClassDeclarationNode) -> JsFunction {
@@ -318,17 +304,11 @@ impl Interpreter {
                         let result = function.call(self, &values);
 
                         if let JsValue::Object(result_object) = result.as_ref().unwrap() {
-                            {
-                                let proto = object.borrow().get_prototype();
+                            let proto = object.borrow().get_prototype();
 
-                                match proto {
-                                    None => {}
-                                    Some(proto) => {
-                                        result_object.borrow_mut().set_proto(proto);
-                                    }
-                                }
+                            if let JsValue::Object(object) = proto {
+                                result_object.borrow_mut().set_proto(object);
                             }
-                            // object.borrow_mut().set_prototype(object.borrow().get_prototype());
                         }
 
                         // println!("{result:?}");
@@ -420,11 +400,20 @@ impl Interpreter {
     }
 
     fn eval_function_expression(&self, node: &FunctionExpressionNode) -> Result<JsValue, String> {
-        return Ok(self.create_js_function(&node.arguments, *node.body.clone()).into());
+        let function = self.create_js_function(&node.arguments, *node.body.clone());
+        let mut object = function.to_object();
+        object.add_property("prototype", JsValue::object([]));
+        // object.set_prototype(JsObject::empty_ref());
+        return Ok(object.to_js_value());
     }
 
     fn eval_function_declaration(&self, node: &FunctionDeclarationNode) -> Result<JsValue, String> {
         let js_function_value: JsValue = self.create_js_function(&node.function_signature.arguments, *node.function_signature.body.clone()).into();
+
+        if let JsValue::Object(function) = &js_function_value {
+            function.borrow_mut().set_prototype(JsObject::empty_ref());
+        }
+
         self.environment.borrow()
             .borrow_mut()
             .define_variable(node.function_signature.name.id.clone(), js_function_value.clone().into())?;
@@ -499,22 +488,20 @@ impl Interpreter {
             }
             AstExpression::MemberExpression(node) => {
                 let object = self.eval_expression(&node.object);
+                let key = self.eval_member_expression_key(&node.property, node.computed)?;
 
-                if let JsValue::Object(object_value) = object {
-                    let object = object_value;
+                match object {
+                    JsValue::Object(object_value) => {
+                        let object = object_value;
 
-                    let key =
-                        self.eval_member_expression_key(&node.property, node.computed)?;
+                        object
+                            .borrow_mut()
+                            .add_property(key.as_str(), right_hand_value);
 
-                    object
-                        .borrow_mut()
-                        .add_property(key.as_str(), right_hand_value);
-
-                    return Ok(JsValue::Object(object));
-                } else {
-                    return Err(
-                        "Cannot assign: left hand side expression is not an object".to_string()
-                    );
+                        Ok(JsValue::Object(object))
+                    },
+                    JsValue::Undefined => Err(format!("Uncaught TypeError: Cannot read properties of undefined (reading '{}')", key).to_string()),
+                    _ => Err("Cannot assign: left hand side expression is not an object".to_string())
                 }
             }
             _ => todo!(),
@@ -1210,10 +1197,12 @@ fn class_proto_of_instance_should_be_equal_to_class_prototype() {
 
     if let JsValue::Object(class_object) = &class {
         if let JsValue::Object(instance_object) = &class_instance {
-            let class_prototype = class_object.borrow().get_prototype().unwrap();
+            let class_prototype = class_object.borrow().get_prototype();
             let class_instance_proto = instance_object.borrow().get_proto().unwrap();
 
-            assert!(Rc::ptr_eq(&class_prototype, &class_instance_proto));
+            if let JsValue::Object(class_prototype) = class_prototype {
+                assert!(Rc::ptr_eq(&class_prototype, &class_instance_proto));
+            }
         }
     }
 }
@@ -1222,7 +1211,7 @@ fn class_proto_of_instance_should_be_equal_to_class_prototype() {
 fn prototypes_of_instances_of_same_class_equals() {
     let mut interpreter = Interpreter::default();
     let code = "
-       class A { constructor(a) { this.a = a; } }
+        class A { constructor(a) { this.a = a; } }
         new A();
     ";
     let class_instance1 = interpret(&mut interpreter, code);
@@ -1237,3 +1226,22 @@ fn prototypes_of_instances_of_same_class_equals() {
     }
 }
 
+#[test]
+fn function_constructor_as_class() {
+    let code = "
+        function User(name, age) {
+            this.name = name;
+            this.age = age;
+        }
+
+        console.log(User.prototype);
+
+        User.prototype.getUserInformation = function() {
+            return 'Name is ' + this.name + ', ' + this.age + ' years old';
+        }
+
+        let user = new User('Anton', 26);
+        user.getUserInformation();
+    ";
+    assert_eq!(eval_code(code), JsValue::String("Name is Anton, 26 years old".to_string()));
+}

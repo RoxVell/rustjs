@@ -150,7 +150,7 @@ impl Parser {
     }
 
     fn parse_function_signature(&mut self) -> Result<FunctionSignature, String> {
-        let function_name = self.parse_identifier().expect("Expected function name");
+        let function_name = self.parse_identifier().expect("Expected a function name");
 
         self.eat(&TokenKind::OpenParen);
         let arguments =
@@ -484,7 +484,7 @@ impl Parser {
                 let token = self.current_token.as_ref().unwrap();
 
                 Report::build(ReportKind::Error, (), token.span.start.row)
-                    .with_message("Incompatible types")
+                    .with_message("Unexpected token found")
                     .with_label(
                         Label::new(token.span.start.row..token.span.end.row)
                             .with_message("Unexpected token")
