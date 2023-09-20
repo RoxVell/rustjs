@@ -15,7 +15,7 @@ impl Default for Parser {
             prev_token: None,
             current_token: None,
             scanner: Scanner::new("".to_string()),
-            source: "".to_string(),
+            source: String::new(),
         }
     }
 }

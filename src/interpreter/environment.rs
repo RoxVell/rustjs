@@ -6,7 +6,7 @@ use crate::value::JsValue;
 
 #[derive(Clone, PartialEq)]
 pub struct Environment {
-    parent: Option<Rc<RefCell<Environment>>>,
+    parent: Option<EnvironmentRef>,
     variables: HashMap<String, (bool, JsValue)>,
 }
 
@@ -28,7 +28,7 @@ impl Default for Environment {
 }
 
 impl Environment {
-    pub fn new(parent: Rc<RefCell<Environment>>) -> Self {
+    pub fn new(parent: EnvironmentRef) -> Self {
         Self {
             parent: Some(parent),
             variables: HashMap::new(),
@@ -46,7 +46,7 @@ impl Environment {
         println!("{:?}", self.variables);
     }
 
-    pub fn get_parent(&self) -> Option<Rc<RefCell<Environment>>> {
+    pub fn get_parent(&self) -> Option<EnvironmentRef> {
         self.parent.as_ref().map(|x| Rc::clone(x))
     }
 

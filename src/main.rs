@@ -4,10 +4,18 @@ mod parser;
 mod scanner;
 mod value;
 mod keywords;
+mod visitor;
+mod symbol_checker;
+mod diagnostic;
 
+use std::cell::RefCell;
 use crate::node::{format_ast};
 use interpreter::*;
 use std::fs;
+use std::rc::Rc;
+use crate::parser::Parser;
+use diagnostic::DiagnosticBag;
+use crate::symbol_checker::symbol_checker::SymbolChecker;
 use crate::value::JsValue;
 
 fn eval(code: &str, is_debug: bool) {
@@ -22,24 +30,37 @@ fn eval(code: &str, is_debug: bool) {
 
     println!("---------");
 
-    let mut parser = parser::Parser::default();
+    let mut parser = Parser::default();
     let ast = parser
         .parse(code)
-        .expect(format!("Error occured during parsing").as_str());
+        .expect(format!("Error occurred during parsing").as_str());
 
     if is_debug {
         println!("{:#?}", ast);
-        println!("eqweeqw");
     }
 
-    let interpreter = Interpreter::default();
-    let result = interpreter
-        .eval_node(&ast)
-        .expect("Error during evaluating node");
+    let mut diagnostic_bag_ref = Rc::new(RefCell::new(DiagnosticBag::new()));
+    let mut symbol_checker = SymbolChecker::new(code, Rc::clone(&diagnostic_bag_ref));
+    symbol_checker.check_symbols(&ast);
 
-    match result {
-        None => println!("No Value"),
-        Some(value) => println!("> {}", value),
+    for error in &diagnostic_bag_ref.borrow().warnings {
+        error.print_diagnostic();
+    }
+
+    for error in &diagnostic_bag_ref.borrow().errors {
+        error.print_diagnostic();
+    }
+
+    if diagnostic_bag_ref.borrow().errors.len() == 0 {
+        let interpreter = Interpreter::default();
+        let result = interpreter
+            .eval_node(&ast)
+            .expect("Error during evaluating node");
+
+        match result {
+            None => println!("No Value"),
+            Some(value) => println!("> {}", value),
+        }
     }
 }
 
@@ -55,9 +76,8 @@ fn main() {
 }
 
 fn format_file(file_path: &str) {
-    let source_code =
-        fs::read_to_string(file_path).expect("Should have been able to read the file");
-    let mut parser = parser::Parser::default();
+    let source_code = fs::read_to_string(file_path).expect("Should have been able to read the file");
+    let mut parser = Parser::default();
     let ast = parser.parse(source_code.as_str()).unwrap();
     println!("{:#?}", ast);
     let formatted_source = format_ast(&ast, 2);
@@ -71,7 +91,7 @@ fn eval_file(file_path: &str) {
 }
 
 fn repl() {
-    let mut parser = parser::Parser::default();
+    let mut parser = Parser::default();
     let interpreter = Interpreter::default();
 
     let mut line = String::new();
@@ -91,19 +111,3 @@ fn repl() {
         }
     }
 }
-
-// fn eval_code(code: &str) -> JsValue {
-//     let interpreter = Interpreter::default();
-//
-//     let ast = parser::Parser::parse_code_to_ast(code)
-//         .expect(format!("Error occured during parsing").as_str());
-//
-//     interpreter.eval_node(&ast).unwrap().unwrap()
-// }
-
-// fn interpret(interpreter: &mut Interpreter, code: &str) -> JsValue {
-//     let ast = parser::Parser::parse_code_to_ast(code)
-//         .expect(format!("Error occured during parsing").as_str());
-//
-//     interpreter.eval_node(&ast).unwrap().unwrap()
-// }

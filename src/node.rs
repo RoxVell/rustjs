@@ -1,7 +1,8 @@
-use crate::scanner::{Token, TokenKind};
+use crate::scanner::{Span, TextSpan, Token, TokenKind};
 use std::fmt;
 use std::fmt::{Debug, Formatter};
-use crate::keywords::{CLASS_KEYWORD, CONST_KEYWORD, ELSE_KEYWORD, EXTENDS_KEYWORD, FOR_KEYWORD, FUNCTION_KEYWORD, IF_KEYWORD, LET_KEYWORD, NEW_KEYWORD, NULL_KEYWORD, RETURN_KEYWORD, THIS_KEYWORD, UNDEFINED_KEYWORD, WHILE_KEYWORD};
+use crate::keywords::{CLASS_KEYWORD, TRUE_KEYWORD, FALSE_KEYWORD, CONST_KEYWORD, ELSE_KEYWORD, EXTENDS_KEYWORD, FOR_KEYWORD, FUNCTION_KEYWORD, IF_KEYWORD, LET_KEYWORD, NEW_KEYWORD, NULL_KEYWORD, RETURN_KEYWORD, THIS_KEYWORD, UNDEFINED_KEYWORD, WHILE_KEYWORD};
+use crate::visitor::Visitor;
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum AstStatement {
@@ -105,6 +106,12 @@ pub struct ClassDeclarationNode {
     pub methods: Vec<Box<ClassMethodNode>>,
 }
 
+impl Into<AstExpression> for ClassDeclarationNode {
+    fn into(self) -> AstExpression {
+        AstExpression::ClassDeclaration(self)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct ClassMethodNode {
     pub function_signature: FunctionSignature,
@@ -205,6 +212,24 @@ pub struct AssignmentExpressionNode {
     pub right: Box<AstExpression>,
 }
 
+impl GetSpan for AssignmentExpressionNode {
+    fn get_span(&self) -> TextSpan {
+        let begin_span = self.left.get_span();
+        let end_span = self.right.get_span();
+
+        TextSpan {
+            start: Span {
+                line: begin_span.start.line,
+                row: begin_span.start.row,
+            },
+            end: Span {
+                line: end_span.end.line,
+                row: end_span.end.row
+            },
+        }
+    }
+}
+
 impl TryFrom<&TokenKind> for AssignmentOperator {
     type Error = String;
 
@@ -256,6 +281,41 @@ impl Into<AstStatement> for NumberLiteralNode {
 pub struct IdentifierNode {
     pub id: String,
     pub token: Token,
+}
+
+pub trait GetSpan {
+    fn get_span(&self) -> TextSpan;
+}
+
+impl GetSpan for IdentifierNode {
+    fn get_span(&self) -> TextSpan {
+        self.token.span.clone()
+    }
+}
+
+impl GetSpan for AstExpression {
+    fn get_span(&self) -> TextSpan {
+        match self {
+            AstExpression::StringLiteral(node) => node.token.span.clone(),
+            AstExpression::NumberLiteral(node) => node.token.span.clone(),
+            AstExpression::BooleanLiteral(node) => node.token.span.clone(),
+            AstExpression::NullLiteral(node) => node.span.clone(),
+            AstExpression::UndefinedLiteral(node) => node.span.clone(),
+            AstExpression::Identifier(node) => node.token.span.clone(),
+            _ => todo!()
+            // AstExpression::ThisExpression(_) => {}
+            // AstExpression::BinaryExpression(_) => {}
+            // AstExpression::AssignmentExpression(_) => {}
+            // AstExpression::FunctionExpression(_) => {}
+            // AstExpression::CallExpression(_) => {}
+            // AstExpression::ConditionalExpression(_) => {}
+            // AstExpression::MemberExpression(_) => {}
+            // AstExpression::NewExpression(_) => {}
+            // AstExpression::ObjectExpression(_) => {}
+            // AstExpression::ClassDeclaration(_) => {}
+            // AstExpression::ArrayExpression(_) => {}
+        }
+    }
 }
 
 impl Debug for IdentifierNode {
@@ -338,6 +398,12 @@ pub struct VariableDeclarationNode {
     pub id: IdentifierNode,
     pub value: Option<Box<AstExpression>>,
 }
+
+// impl GetSpan for VariableDeclarationNode {
+//     fn get_span(&self) -> TextSpan {
+//         todo!()
+//     }
+// }
 
 trait FormatNode {
     fn format(&self, ident: u8, level: u8) -> String;
@@ -660,3 +726,127 @@ pub fn format_ast(node: &AstStatement, ident: u8) -> String {
 //         );
 //     }
 // }
+
+pub struct Printer {
+    ident: u32,
+    level: u32,
+    pub(crate) result: String,
+}
+
+impl Printer {
+    pub fn new(ident: u32) -> Self {
+        Self {
+            ident,
+            level: 0,
+            result: String::new(),
+        }
+    }
+
+    // fn spaces(&self) -> &str {
+    //     " ".repeat((self.ident * self.level) as usize).as_str()
+    // }
+}
+
+impl Visitor for Printer {
+    fn visit_program_statement(&mut self, stmt: &ProgramNode) {
+        stmt.statements.iter().for_each(|stmt| {
+            let spaces = " ".repeat((self.ident * self.level) as usize);
+            self.result += spaces.as_str();
+            self.visit_statement(stmt)
+        });
+    }
+
+    fn visit_block_statement(&mut self, stmt: &BlockStatementNode) {
+        self.result += "{\n";
+        self.level += 1;
+        stmt.statements.iter().for_each(|stmt| {
+            let spaces = " ".repeat((self.ident * self.level) as usize);
+            self.result += spaces.as_str();
+            self.visit_statement(stmt)
+        });
+        self.result += "}";
+    }
+
+    fn visit_variable_declaration(&mut self, stmt: &VariableDeclarationNode) {
+        self.result += match stmt.kind {
+            VariableDeclarationKind::Let => LET_KEYWORD,
+            VariableDeclarationKind::Const => CONST_KEYWORD
+        };
+
+        self.result += " ";
+
+        self.visit_identifier_node(&stmt.id);
+
+        self.result += " = ";
+
+        if stmt.value.is_some() {
+            self.visit_expression(stmt.value.as_ref().unwrap());
+        }
+
+        self.result += ";\n";
+    }
+
+    fn visit_identifier_node(&mut self, stmt: &IdentifierNode) {
+        self.result += stmt.id.as_str();
+        // println!("visit_identifier_declaration {}", stmt.id);
+    }
+
+    fn visit_string_literal(&mut self, stmt: &StringLiteralNode) {
+        self.result += stmt.value.as_str();
+        // println!("visit_string_literal: {}", stmt.value);
+    }
+
+    fn visit_number_literal(&mut self, stmt: &NumberLiteralNode) {
+        self.result += stmt.value.to_string().as_str();
+        // println!("visit_number_literal: {}", stmt.value);
+    }
+
+    fn visit_expression_statement(&mut self, stmt: &AstExpression) {
+        println!("visit_expression_statement {stmt:?}");
+        self.visit_expression(stmt);
+        self.result += ";\n";
+    }
+
+    fn visit_if_statement(&mut self, stmt: &IfStatementNode) {
+        self.result += "if (";
+        self.visit_expression(&stmt.condition);
+        self.result += ") ";
+
+        self.visit_statement(&stmt.then_branch);
+
+        if let Some(else_branch) = &stmt.else_branch {
+            self.result += " else ";
+            self.visit_statement(else_branch);
+        }
+    }
+
+    fn visit_boolean_literal(&mut self, stmt: &BooleanLiteralNode) {
+        self.result += if stmt.value { TRUE_KEYWORD } else { FALSE_KEYWORD };
+    }
+
+    fn visit_binary_expression(&mut self, stmt: &BinaryExpressionNode) {
+        println!("visit_binary_expression");
+        self.visit_expression(stmt.left.as_ref());
+        self.result += " ";
+        self.result += match stmt.operator {
+            BinaryOperator::Add => "+",
+            BinaryOperator::Sub => "-",
+            BinaryOperator::Div => "/",
+            BinaryOperator::Mul => "*",
+            BinaryOperator::LogicalOr => "||",
+            BinaryOperator::LogicalAnd => "&&",
+            BinaryOperator::MoreThan => ">",
+            BinaryOperator::MoreThanOrEqual => ">=",
+            BinaryOperator::LessThan => "<",
+            BinaryOperator::LessThanOrEqual => "<=",
+            BinaryOperator::Equality => "==",
+            BinaryOperator::StrictEquality => "===",
+            BinaryOperator::Inequality => "!=",
+            BinaryOperator::StrictInequality => "!==",
+            BinaryOperator::MulMul => "**",
+        };
+        self.result += " ";
+
+        self.visit_expression(stmt.right.as_ref());
+    }
+}
