@@ -42,6 +42,7 @@ impl Interpreter {
                 self.eval_if_statement(node)?;
                 return Ok(None);
             },
+            AstStatement::BreakStatement(_) => todo!()
         }
     }
 

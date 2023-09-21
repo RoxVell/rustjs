@@ -1,7 +1,7 @@
 use crate::scanner::{Span, TextSpan, Token, TokenKind};
 use std::fmt;
 use std::fmt::{Debug, Formatter};
-use crate::keywords::{CLASS_KEYWORD, TRUE_KEYWORD, FALSE_KEYWORD, CONST_KEYWORD, ELSE_KEYWORD, EXTENDS_KEYWORD, FOR_KEYWORD, FUNCTION_KEYWORD, IF_KEYWORD, LET_KEYWORD, NEW_KEYWORD, NULL_KEYWORD, RETURN_KEYWORD, THIS_KEYWORD, UNDEFINED_KEYWORD, WHILE_KEYWORD};
+use crate::keywords::{CLASS_KEYWORD, TRUE_KEYWORD, FALSE_KEYWORD, CONST_KEYWORD, ELSE_KEYWORD, EXTENDS_KEYWORD, FOR_KEYWORD, FUNCTION_KEYWORD, IF_KEYWORD, LET_KEYWORD, NEW_KEYWORD, NULL_KEYWORD, RETURN_KEYWORD, THIS_KEYWORD, UNDEFINED_KEYWORD, WHILE_KEYWORD, BREAK_KEYWORD};
 use crate::visitor::Visitor;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -15,6 +15,7 @@ pub enum AstStatement {
     ReturnStatement(ReturnStatementNode),
     ExpressionStatement(AstExpression),
     IfStatement(IfStatementNode),
+    BreakStatement(Token),
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -672,6 +673,7 @@ impl FormatNode for AstStatement {
                 return result;
             }
             AstStatement::ExpressionStatement(node) => format!("{};", node.format(ident, level)),
+            AstStatement::BreakStatement(_) => format!("{BREAK_KEYWORD}")
         }
     }
 }

@@ -28,8 +28,6 @@ fn eval(code: &str, is_debug: bool) {
         }
     }
 
-    println!("---------");
-
     let mut parser = Parser::default();
     let ast = parser
         .parse(code)

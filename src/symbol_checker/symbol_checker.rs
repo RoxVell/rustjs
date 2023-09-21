@@ -1,11 +1,10 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::collections::HashMap;
-use std::ptr::eq;
 use crate::diagnostic::{Diagnostic, DiagnosticBagRef, DiagnosticKind};
-use crate::node::{AssignmentExpressionNode, AstExpression, AstStatement, BlockStatementNode, ClassDeclarationNode, FunctionDeclarationNode, GetSpan, IdentifierNode, VariableDeclarationKind, VariableDeclarationNode};
-use crate::scanner::TextSpan;
-use crate::symbol_checker::diagnostics::{ConstantAssigningDiagnostic, MultipleAssignmentDiagnostic, UnusedVariableDiagnostic, VariableNotDefinedDiagnostic};
+use crate::node::{AssignmentExpressionNode, AstExpression, AstStatement, BlockStatementNode, ClassDeclarationNode, ForStatementNode, FunctionDeclarationNode, GetSpan, IdentifierNode, VariableDeclarationKind, VariableDeclarationNode, WhileStatementNode};
+use crate::scanner::{TextSpan, Token};
+use crate::symbol_checker::diagnostics::{ConstantAssigningDiagnostic, MultipleAssignmentDiagnostic, UnusedVariableDiagnostic, VariableNotDefinedDiagnostic, WrongBreakContextDiagnostic, WrongThisContextDiagnostic};
 use crate::visitor::Visitor;
 
 /// Should traverse ast and find unused variables & assigning to constant variables
@@ -13,6 +12,8 @@ pub struct SymbolChecker<'a> {
     source: &'a str,
     environment: RefCell<LightEnvironmentRef>,
     diagnostic_bag: DiagnosticBagRef<'a>,
+    is_inside_this_context: bool,
+    break_context_stack: Vec<bool>,
 }
 
 impl<'a> SymbolChecker<'a> {
@@ -21,6 +22,8 @@ impl<'a> SymbolChecker<'a> {
             environment: RefCell::new(Rc::new(RefCell::new(LightEnvironment::default()))),
             source,
             diagnostic_bag,
+            is_inside_this_context: false,
+            break_context_stack: vec![],
         }
     }
 
@@ -51,7 +54,8 @@ impl<'a> SymbolChecker<'a> {
     }
 
     fn define_variable(&mut self, symbol_name: &str, is_const: bool, span: TextSpan) {
-        let error = self.environment.borrow().borrow_mut().define_variable(symbol_name, Symbol { is_const, span: span.clone() });
+        let error = self.environment.borrow().borrow_mut()
+            .define_variable(symbol_name, Symbol { is_const, span: span.clone() });
 
         if error.is_some() {
             self.diagnostic_bag.borrow_mut().report_error(
@@ -83,6 +87,18 @@ impl<'a> SymbolChecker<'a> {
             .to_owned();
 
         self.set_environment(parent_environment);
+    }
+
+    fn enter_break_context(&mut self) {
+        self.break_context_stack.push(true);
+    }
+
+    fn out_break_context(&mut self) {
+        self.break_context_stack.push(false);
+    }
+
+    fn pop_break_context(&mut self) {
+        self.break_context_stack.pop();
     }
 }
 
@@ -226,10 +242,66 @@ impl<'a> Visitor for SymbolChecker<'a> {
         if let Some(parent) = &stmt.parent {
             self.visit_identifier_node(parent);
         }
+
+        self.is_inside_this_context = true;
+        stmt.methods.iter().for_each(|x| self.visit_class_method(x));
+        self.is_inside_this_context = false;
     }
 
     fn visit_function_declaration(&mut self, stmt: &FunctionDeclarationNode) {
+        self.out_break_context();
+        self.is_inside_this_context = true;
         self.visit_function_signature(&stmt.function_signature);
+        self.is_inside_this_context = false;
         self.define_variable(stmt.function_signature.name.id.as_str(), false, stmt.function_signature.name.get_span());
+        self.pop_break_context();
+    }
+
+    fn visit_this_expression(&mut self, token: &Token) {
+        if !self.is_inside_this_context {
+            self.diagnostic_bag.borrow_mut().report_error(
+                Diagnostic::new(DiagnosticKind::WrongThisContext(
+                    WrongThisContextDiagnostic { span: token.span.clone() }
+                ), self.source)
+            );
+        }
+    }
+
+    fn visit_while_statement(&mut self, node: &WhileStatementNode) {
+        self.enter_break_context();
+        self.visit_expression(&node.condition);
+        self.visit_statement(&node.body);
+        self.pop_break_context();
+    }
+
+    fn visit_for_statement(&mut self, stmt: &ForStatementNode) {
+        if let Some(init) = &stmt.init {
+            self.visit_statement(init);
+        }
+
+        if let Some(test) = &stmt.test {
+            self.visit_expression(test);
+        }
+
+        if let Some(update) = &stmt.update {
+            self.visit_expression(update);
+        }
+
+        self.enter_break_context();
+        self.visit_statement(&stmt.body);
+        self.pop_break_context();
+    }
+
+    fn visit_break_statement(&mut self, token: &Token) {
+        let break_context_state = self.break_context_stack.last();
+        let is_inside_break_context = break_context_state.is_some() && *break_context_state.unwrap();
+
+        if !is_inside_break_context {
+            self.diagnostic_bag.borrow_mut().report_error(
+                Diagnostic::new(DiagnosticKind::WrongBreakContext(
+                    WrongBreakContextDiagnostic { span: token.span.clone() }
+                ), self.source)
+            );
+        }
     }
 }

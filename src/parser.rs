@@ -60,9 +60,17 @@ impl Parser {
             Some(TokenKind::FunctionKeyword) => self.parse_function_declaration(),
             Some(TokenKind::ReturnKeyword) => self.parse_return_statement(),
             Some(TokenKind::ForKeyword) => self.parse_for_statement(),
+            Some(TokenKind::BreakKeyword) => self.parse_break_statement(),
             // Some(TokenKind::ClassKeyword) => self.parse_class_expression(),
             _ => self.parse_expression_statement(),
         }
+    }
+
+    fn parse_break_statement(&mut self) -> Result<AstStatement, String> {
+        let token = self.get_copy_current_token();
+        self.eat(&TokenKind::BreakKeyword);
+        self.eat_if_present(&TokenKind::Semicolon);
+        return Ok(AstStatement::BreakStatement(token));
     }
 
     fn parse_class_expression(&mut self) -> Result<AstExpression, String> {

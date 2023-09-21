@@ -1,4 +1,5 @@
 use crate::node::*;
+use crate::scanner::Token;
 
 pub trait Visitor {
     fn visit_statement(&mut self, stmt: &AstStatement) {
@@ -12,8 +13,11 @@ pub trait Visitor {
             AstStatement::ReturnStatement(node) => self.visit_return_statement(node),
             AstStatement::ExpressionStatement(stmt) => self.visit_expression_statement(stmt),
             AstStatement::IfStatement(stmt) => self.visit_if_statement(stmt),
+            AstStatement::BreakStatement(token) => self.visit_break_statement(token),
         }
     }
+
+    fn visit_break_statement(&mut self, _: &Token) {}
 
     fn visit_while_statement(&mut self, node: &WhileStatementNode) {
         self.visit_expression(&node.condition);
@@ -98,7 +102,7 @@ pub trait Visitor {
             AstExpression::BooleanLiteral(node) => self.visit_boolean_literal(node),
             AstExpression::NullLiteral(_) => self.visit_null_literal(),
             AstExpression::UndefinedLiteral(_) => self.visit_undefined_literal(),
-            AstExpression::ThisExpression(_) => self.visit_this_expression(),
+            AstExpression::ThisExpression(token) => self.visit_this_expression(token),
             AstExpression::Identifier(node) => self.visit_identifier_node(node),
             AstExpression::BinaryExpression(node) => self.visit_binary_expression(node),
             AstExpression::AssignmentExpression(node) => self.visit_assignment_expression(node),
@@ -132,7 +136,7 @@ pub trait Visitor {
 
     fn visit_null_literal(&mut self) {}
 
-    fn visit_this_expression(&mut self) {}
+    fn visit_this_expression(&mut self, _: &Token) {}
 
     fn visit_object_expression(&mut self, node: &ObjectExpressionNode) {
         node.properties.iter().for_each(|x| self.visit_object_property(x));

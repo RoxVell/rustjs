@@ -1,6 +1,6 @@
 use std::rc::Rc;
 use std::cell::RefCell;
-use crate::symbol_checker::diagnostics::{ConstantAssigningDiagnostic, MultipleAssignmentDiagnostic, UnusedVariableDiagnostic, VariableNotDefinedDiagnostic};
+use crate::symbol_checker::diagnostics::{ConstantAssigningDiagnostic, MultipleAssignmentDiagnostic, UnusedVariableDiagnostic, VariableNotDefinedDiagnostic, WrongBreakContextDiagnostic, WrongThisContextDiagnostic};
 
 pub struct DiagnosticBag<'a> {
     pub warnings: Vec<Diagnostic<'a>>,
@@ -32,6 +32,8 @@ pub enum DiagnosticKind {
     ConstantAssigning(ConstantAssigningDiagnostic),
     VariableNotDefined(VariableNotDefinedDiagnostic),
     MultipleAssignment(MultipleAssignmentDiagnostic),
+    WrongThisContext(WrongThisContextDiagnostic),
+    WrongBreakContext(WrongBreakContextDiagnostic),
 }
 
 #[derive(Debug)]
@@ -54,6 +56,8 @@ impl<'a> Diagnostic<'a> {
             DiagnosticKind::ConstantAssigning(diagnostic) => diagnostic.print_diagnostic(self.source),
             DiagnosticKind::VariableNotDefined(diagnostic) => diagnostic.print_diagnostic(self.source),
             DiagnosticKind::MultipleAssignment(diagnostic) => diagnostic.print_diagnostic(self.source),
+            DiagnosticKind::WrongThisContext(diagnostic) => diagnostic.print_diagnostic(self.source),
+            DiagnosticKind::WrongBreakContext(diagnostic) => diagnostic.print_diagnostic(self.source),
         }
     }
 }
