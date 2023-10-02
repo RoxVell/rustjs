@@ -4,7 +4,7 @@ pub mod function;
 use std::collections::HashMap;
 use std::fmt::{Debug, Display, Formatter};
 use std::ops;
-use crate::interpreter::Interpreter;
+use crate::interpreter_visitor::Interpreter;
 use crate::keywords::{NULL_KEYWORD, UNDEFINED_KEYWORD};
 use crate::value::function::JsFunction;
 use crate::value::object::{JsObject, JsObjectRef, ObjectKind};

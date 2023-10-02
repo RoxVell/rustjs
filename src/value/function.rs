@@ -1,8 +1,9 @@
 use std::cell::RefCell;
 use std::fmt::{Debug, Formatter};
 use std::rc::Rc;
-use crate::interpreter::{Environment, EnvironmentRef, Interpreter};
-use crate::node::{AstStatement, BlockStatementNode};
+use crate::interpreter::environment::*;
+use crate::interpreter_visitor::{Execute, Interpreter};
+use crate::nodes::{AstStatement, BlockStatementNode};
 use crate::value::JsValue;
 use crate::value::object::{JsObject, ObjectKind};
 
@@ -81,8 +82,9 @@ impl Debug for JsFunctionArg {
 
 impl Callable for OrdinaryFunction {
     fn call(&self, interpreter: &Interpreter, _: &Vec<JsValue>) -> Result<JsValue, String> {
-        let result = interpreter.eval_node(self.body.as_ref());
-        return result.map(|x| x.unwrap_or(JsValue::Undefined));
+        self.body.as_ref().execute(interpreter)
+        // let result = self.body.as_ref().execute(interpreter);
+        // return result.map(|x| x.unwrap_or(JsValue::Undefined));
     }
 }
 

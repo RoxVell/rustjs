@@ -2,7 +2,8 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::collections::HashMap;
 use crate::diagnostic::{Diagnostic, DiagnosticBagRef, DiagnosticKind};
-use crate::node::{AssignmentExpressionNode, AstExpression, AstStatement, BlockStatementNode, ClassDeclarationNode, ForStatementNode, FunctionDeclarationNode, GetSpan, IdentifierNode, VariableDeclarationKind, VariableDeclarationNode, WhileStatementNode};
+use crate::nodes::*;
+// use crate::node::{AssignmentExpressionNode, AstExpression, AstStatement, BlockStatementNode, ClassDeclarationNode, ForStatementNode, FunctionDeclarationNode, GetSpan, IdentifierNode, VariableDeclarationKind, VariableDeclarationNode, WhileStatementNode};
 use crate::scanner::{TextSpan, Token};
 use crate::symbol_checker::diagnostics::{ConstantAssigningDiagnostic, MultipleAssignmentDiagnostic, UnusedVariableDiagnostic, VariableNotDefinedDiagnostic, WrongBreakContextDiagnostic, WrongThisContextDiagnostic};
 use crate::visitor::Visitor;
@@ -257,11 +258,11 @@ impl<'a> Visitor for SymbolChecker<'a> {
         self.pop_break_context();
     }
 
-    fn visit_this_expression(&mut self, token: &Token) {
+    fn visit_this_expression(&mut self, node: &ThisExpressionNode) {
         if !self.is_inside_this_context {
             self.diagnostic_bag.borrow_mut().report_error(
                 Diagnostic::new(DiagnosticKind::WrongThisContext(
-                    WrongThisContextDiagnostic { span: token.span.clone() }
+                    WrongThisContextDiagnostic { span: node.token.span.clone() }
                 ), self.source)
             );
         }
