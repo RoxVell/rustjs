@@ -36,19 +36,6 @@ impl Interpreter {
         self.set_environment(parent_environment);
     }
 
-    pub(crate) fn exponentiation(&self, left: &JsValue, right: &JsValue) -> Result<JsValue, String> {
-        match (left, right) {
-            (JsValue::Number(left_number), JsValue::Number(right_number)) => {
-                Ok(JsValue::Number(left_number.powf(*right_number)))
-            }
-            _ => Err(format!(
-                "exponentiation of types '{}' and '{}' is not possible",
-                left.get_type_as_str(),
-                right.get_type_as_str()
-            )),
-        }
-    }
-
     pub(crate) fn logical_or(&self, left: &JsValue, right: &JsValue) -> Result<JsValue, String> {
         if left.to_bool() {
             return Ok(left.clone());
@@ -184,7 +171,6 @@ impl Interpreter {
 pub trait Execute {
     fn execute(&self, interpreter: &Interpreter) -> Result<JsValue, String>;
 }
-
 
 fn get_global_environment() -> Environment {
     fn console_log(_: &Interpreter, arguments: &Vec<JsValue>) -> Result<JsValue, String> {
@@ -355,6 +341,9 @@ fn try_to_get_undefined_variable_from_environment() {
 fn add_operator_works() {
     let code = "2 + 2;";
     assert_eq!(eval_code(code), JsValue::Number(4.0));
+
+    let code = "'Hello ' + 'world!';";
+    assert_eq!(eval_code(code), JsValue::String("Hello world!".to_string()));
 }
 
 #[test]
@@ -440,9 +429,9 @@ fn object_expression_works() {
     let code = "
         let a = {
             5: 2 + 3,
-            \"qwe-123\": \"string prop\",
-            abc: \"identifier prop\",
-            [\"hello \" + 123]: \"hello 123\",
+            'qwe-123': 'string prop',
+            abc: 'identifier prop',
+            ['hello ' + 123]: 'hello 123',
         };
 
         a;
@@ -506,7 +495,7 @@ fn nested_member_expression_works() {
     let a = {
         b: {
             c: {
-                d: \"qwerty\"
+                d: 'qwerty'
             }
         }
     };
@@ -563,15 +552,15 @@ fn object_method_this_expression() {
 fn comparison() {
     let mut interpreter = Interpreter::default();
 
-    assert_eq!(interpret(&mut interpreter, "'abc' === 'abc'"), JsValue::Boolean(true));
-    assert_eq!(interpret(&mut interpreter, "'abc' === 'qwe'"), JsValue::Boolean(false));
-    assert_eq!(interpret(&mut interpreter, "123 === 123"), JsValue::Boolean(true));
-    assert_eq!(interpret(&mut interpreter, "123 === 456"), JsValue::Boolean(false));
-    assert_eq!(interpret(&mut interpreter, "true === true"), JsValue::Boolean(true));
-    assert_eq!(interpret(&mut interpreter, "true === false"), JsValue::Boolean(false));
-    assert_eq!(interpret(&mut interpreter, "false === false"), JsValue::Boolean(true));
-    assert_eq!(eval_code("let a = {}; let b = {}; a === b;"), JsValue::Boolean(false));
-    assert_eq!(eval_code("let a = {}; let b = a; a === b;"), JsValue::Boolean(true));
+    assert_eq!(interpret(&mut interpreter, "'abc' == 'abc'"), JsValue::Boolean(true));
+    assert_eq!(interpret(&mut interpreter, "'abc' == 'qwe'"), JsValue::Boolean(false));
+    assert_eq!(interpret(&mut interpreter, "123 == 123"), JsValue::Boolean(true));
+    assert_eq!(interpret(&mut interpreter, "123 == 456"), JsValue::Boolean(false));
+    assert_eq!(interpret(&mut interpreter, "true == true"), JsValue::Boolean(true));
+    assert_eq!(interpret(&mut interpreter, "true == false"), JsValue::Boolean(false));
+    assert_eq!(interpret(&mut interpreter, "false == false"), JsValue::Boolean(true));
+    assert_eq!(eval_code("let a = {}; let b = {}; a == b;"), JsValue::Boolean(false));
+    assert_eq!(eval_code("let a = {}; let b = a; a == b;"), JsValue::Boolean(true));
 }
 
 #[test]
@@ -584,9 +573,7 @@ fn prototype_property_access() {
         };
 
         let target = { b: 30 };
-
         setPrototypeOf(target, prototype);
-
         target.a;
     ";
     assert_eq!(interpret(&mut interpreter, code), JsValue::Number(10.0));
@@ -602,11 +589,8 @@ fn prototype_mutable_property_access() {
         };
 
         let target = { b: 30 };
-
         setPrototypeOf(target, prototype);
-
         prototype.a = 50;
-
         target.a;
     ";
     assert_eq!(interpret(&mut interpreter, code), JsValue::Number(50.0));

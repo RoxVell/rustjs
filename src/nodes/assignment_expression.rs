@@ -28,12 +28,9 @@ impl Execute for AssignmentExpressionNode {
                     AssignmentOperator::SubEqual => &original_value - &right_hand_value,
                     AssignmentOperator::DivEqual => &original_value / &right_hand_value,
                     AssignmentOperator::MulEqual => &original_value * &right_hand_value,
-                    AssignmentOperator::ExponentiationEqual => {
-                        interpreter.exponentiation(&original_value, &right_hand_value)
-                    }
+                    AssignmentOperator::ExponentiationEqual => original_value.exponentiation(&right_hand_value),
                     AssignmentOperator::Equal => Ok(right_hand_value),
-                }
-                    .unwrap();
+                }.unwrap();
 
                 interpreter.environment.borrow()
                     .borrow_mut()

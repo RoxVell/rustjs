@@ -53,9 +53,7 @@ pub enum TokenKind {
 
     // Equality
     Equality,
-    StrictEquality,
     Inequality,
-    StrictInequality,
 
     OpenParen,
     CloseParen,
@@ -136,9 +134,7 @@ impl TokenKind {
             TokenKind::OpenBrace => "{".to_string(),
             TokenKind::CloseBrace => "}".to_string(),
             TokenKind::Equality => "==".to_string(),
-            TokenKind::StrictEquality => "===".to_string(),
             TokenKind::Inequality => "!=".to_string(),
-            TokenKind::StrictInequality => "!==".to_string(),
             TokenKind::Comma => ",".to_string(),
             TokenKind::Semicolon => ";".to_string(),
             TokenKind::Dot => ".".to_string(),
@@ -288,12 +284,6 @@ impl Scanner {
 
             if let Some('=') = next_char {
                 self.current_pos += 1;
-
-                if let Some('=') = next_char {
-                    self.current_pos += 1;
-                    return Some(self.consume(TokenKind::StrictEquality));
-                }
-
                 return Some(self.consume(TokenKind::Equality));
             }
 
@@ -307,12 +297,6 @@ impl Scanner {
 
             if let Some('=') = next_char {
                 self.current_pos += 1;
-
-                if let Some('=') = next_char {
-                    self.current_pos += 1;
-                    return Some(self.consume(TokenKind::StrictInequality));
-                }
-
                 return Some(self.consume(TokenKind::Inequality));
             }
 
@@ -379,8 +363,7 @@ impl Scanner {
                     }
                 }
 
-                let token =
-                    TokenKind::Comment(self.source_code[self.current_pos..=cursor + 1].to_string());
+                let token = TokenKind::Comment(self.source_code[self.current_pos..=cursor + 1].to_string());
                 self.current_pos = cursor + 2;
                 return Some(self.consume(token));
             } else {
@@ -393,12 +376,6 @@ impl Scanner {
 
             if let Some('=') = chars.next() {
                 self.current_pos += 1;
-
-                if let Some('=') = chars.next() {
-                    self.current_pos += 1;
-                    return Some(self.consume(TokenKind::StrictEquality));
-                }
-
                 return Some(self.consume(TokenKind::Equality));
             }
 

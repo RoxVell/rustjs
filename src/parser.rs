@@ -392,9 +392,7 @@ impl Parser {
             &Self::parse_comparison_expression,
             &[
                 TokenKind::Equality,
-                TokenKind::StrictEquality,
                 TokenKind::Inequality,
-                TokenKind::StrictInequality,
             ],
         );
     }

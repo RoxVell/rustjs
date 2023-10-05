@@ -25,9 +25,7 @@ pub enum BinaryOperator {
     LessThan,
     LessThanOrEqual,
     Equality,
-    StrictEquality,
     Inequality,
-    StrictInequality,
 }
 
 impl Execute for BinaryExpressionNode {
@@ -40,9 +38,7 @@ impl Execute for BinaryExpressionNode {
             BinaryOperator::Sub => &evaluated_left_node - &evaluated_right_node,
             BinaryOperator::Div => &evaluated_left_node / &evaluated_right_node,
             BinaryOperator::Mul => &evaluated_left_node * &evaluated_right_node,
-            BinaryOperator::MulMul => {
-                interpreter.exponentiation(&evaluated_left_node, &evaluated_right_node)
-            }
+            BinaryOperator::MulMul => evaluated_left_node.exponentiation(&evaluated_right_node),
             BinaryOperator::LogicalOr => {
                 interpreter.logical_or(&evaluated_left_node, &evaluated_right_node)
             }
@@ -74,18 +70,12 @@ impl Execute for BinaryExpressionNode {
                 ).to_string())
             }
             BinaryOperator::Equality
-            | BinaryOperator::StrictEquality
-            | BinaryOperator::Inequality
-            | BinaryOperator::StrictInequality => {
+            | BinaryOperator::Inequality => {
                 match (&evaluated_left_node, &evaluated_right_node) {
                     (JsValue::Number(left_number), JsValue::Number(right_number)) => {
                         let value = match self.operator {
-                            BinaryOperator::Equality | BinaryOperator::StrictEquality => {
-                                left_number == right_number
-                            }
-                            BinaryOperator::Inequality | BinaryOperator::StrictInequality => {
-                                left_number != right_number
-                            }
+                            BinaryOperator::Equality => left_number == right_number,
+                            BinaryOperator::Inequality => left_number != right_number,
                             _ => unreachable!(),
                         };
 
@@ -93,12 +83,8 @@ impl Execute for BinaryExpressionNode {
                     },
                     (JsValue::String(left_string), JsValue::String(right_string)) => {
                         let value = match self.operator {
-                            BinaryOperator::Equality | BinaryOperator::StrictEquality => {
-                                left_string == right_string
-                            }
-                            BinaryOperator::Inequality | BinaryOperator::StrictInequality => {
-                                left_string != right_string
-                            }
+                            BinaryOperator::Equality => left_string == right_string,
+                            BinaryOperator::Inequality => left_string != right_string,
                             _ => unreachable!(),
                         };
 
@@ -106,12 +92,8 @@ impl Execute for BinaryExpressionNode {
                     },
                     (JsValue::Object(object_left), JsValue::Object(object_right)) => {
                         let value = match self.operator {
-                            BinaryOperator::Equality | BinaryOperator::StrictEquality => {
-                                Rc::ptr_eq(object_left, object_right)
-                            }
-                            BinaryOperator::Inequality | BinaryOperator::StrictInequality => {
-                                !Rc::ptr_eq(object_left, object_right)
-                            }
+                            BinaryOperator::Equality => Rc::ptr_eq(object_left, object_right),
+                            BinaryOperator::Inequality => !Rc::ptr_eq(object_left, object_right),
                             _ => unreachable!(),
                         };
 
@@ -142,9 +124,7 @@ impl TryFrom<&TokenKind> for BinaryOperator {
             TokenKind::MoreThan => Ok(Self::MoreThan),
             TokenKind::MoreThanOrEqual => Ok(Self::MoreThanOrEqual),
             TokenKind::Equality => Ok(Self::Equality),
-            TokenKind::StrictEquality => Ok(Self::StrictEquality),
             TokenKind::Inequality => Ok(Self::Inequality),
-            TokenKind::StrictInequality => Ok(Self::StrictInequality),
             _ => Err("Cannot convert token kind to binary operator".to_string()),
         }
     }

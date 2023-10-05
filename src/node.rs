@@ -121,9 +121,7 @@ impl Visitor for Printer {
             BinaryOperator::LessThan => "<",
             BinaryOperator::LessThanOrEqual => "<=",
             BinaryOperator::Equality => "==",
-            BinaryOperator::StrictEquality => "===",
             BinaryOperator::Inequality => "!=",
-            BinaryOperator::StrictInequality => "!==",
             BinaryOperator::MulMul => "**",
         };
         self.result += " ";
