@@ -1,4 +1,4 @@
-use crate::node::*;
+use crate::nodes::*;
 use crate::scanner::Token;
 
 pub trait Visitor {
@@ -102,7 +102,7 @@ pub trait Visitor {
             AstExpression::BooleanLiteral(node) => self.visit_boolean_literal(node),
             AstExpression::NullLiteral(_) => self.visit_null_literal(),
             AstExpression::UndefinedLiteral(_) => self.visit_undefined_literal(),
-            AstExpression::ThisExpression(token) => self.visit_this_expression(token),
+            AstExpression::ThisExpression(node) => self.visit_this_expression(node),
             AstExpression::Identifier(node) => self.visit_identifier_node(node),
             AstExpression::BinaryExpression(node) => self.visit_binary_expression(node),
             AstExpression::AssignmentExpression(node) => self.visit_assignment_expression(node),
@@ -136,7 +136,7 @@ pub trait Visitor {
 
     fn visit_null_literal(&mut self) {}
 
-    fn visit_this_expression(&mut self, _: &Token) {}
+    fn visit_this_expression(&mut self, _: &ThisExpressionNode) {}
 
     fn visit_object_expression(&mut self, node: &ObjectExpressionNode) {
         node.properties.iter().for_each(|x| self.visit_object_property(x));

@@ -4,8 +4,8 @@ pub mod function;
 use std::collections::HashMap;
 use std::fmt::{Debug, Display, Formatter};
 use std::ops;
-use crate::interpreter::Interpreter;
 use crate::keywords::{NULL_KEYWORD, UNDEFINED_KEYWORD};
+use crate::nodes::Interpreter;
 use crate::value::function::JsFunction;
 use crate::value::object::{JsObject, JsObjectRef, ObjectKind};
 
@@ -65,6 +65,19 @@ impl JsValue {
 
     pub fn to_bool_js_value(&self) -> Self {
         JsValue::Boolean(self.to_bool())
+    }
+
+    pub fn exponentiation(&self, rhs: &JsValue) -> Result<JsValue, String> {
+        match (self, rhs) {
+            (JsValue::Number(left_number), JsValue::Number(right_number)) => {
+                Ok(JsValue::Number(left_number.powf(*right_number)))
+            }
+            _ => Err(format!(
+                "exponentiation of types '{}' and '{}' is not possible",
+                self.get_type_as_str(),
+                rhs.get_type_as_str()
+            )),
+        }
     }
 }
 

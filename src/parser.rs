@@ -1,6 +1,6 @@
-use crate::node::*;
 use crate::scanner::{Scanner, TokenKind, Token};
 use ariadne::{ColorGenerator, Label, Report, ReportKind, Source};
+use crate::nodes::*;
 
 pub struct Parser {
     prev_token: Option<Token>,
@@ -392,9 +392,7 @@ impl Parser {
             &Self::parse_comparison_expression,
             &[
                 TokenKind::Equality,
-                TokenKind::StrictEquality,
                 TokenKind::Inequality,
-                TokenKind::StrictInequality,
             ],
         );
     }
@@ -535,7 +533,7 @@ impl Parser {
     fn parse_this_expression(&mut self) -> Result<AstExpression, String> {
         let token = self.get_copy_current_token();
         self.eat(&TokenKind::ThisKeyword);
-        return Ok(AstExpression::ThisExpression(token));
+        return Ok(AstExpression::ThisExpression(ThisExpressionNode { token }));
     }
 
     fn parse_object_literal(&mut self) -> Result<AstExpression, String> {
