@@ -2,7 +2,7 @@ use std::cell::RefCell;
 use std::fmt::{Debug, Formatter};
 use std::rc::Rc;
 use crate::interpreter::environment::*;
-use crate::interpreter_visitor::{Execute, Interpreter};
+use crate::interpreter::ast_interpreter::{Execute, Interpreter};
 use crate::nodes::{AstStatement, BlockStatementNode};
 use crate::value::JsValue;
 use crate::value::object::{JsObject, ObjectKind};

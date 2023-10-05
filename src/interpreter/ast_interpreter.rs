@@ -1,6 +1,6 @@
 use std::cell::RefCell;
 use std::rc::Rc;
-use crate::interpreter::environment::*;
+use crate::interpreter::environment::{Environment, EnvironmentRef};
 use crate::nodes::{AstExpression, AstStatement, FunctionArgument};
 use crate::value::function::{Callable, JsFunction, JsFunctionArg};
 use crate::value::JsValue;

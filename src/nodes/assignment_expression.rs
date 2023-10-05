@@ -1,4 +1,4 @@
-use crate::interpreter_visitor::{Execute, Interpreter};
+use crate::interpreter::ast_interpreter::{Execute, Interpreter};
 use crate::node::GetSpan;
 use crate::nodes::AstExpression;
 use crate::scanner::{Span, TextSpan, TokenKind};

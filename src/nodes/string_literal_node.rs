@@ -1,5 +1,5 @@
 use std::fmt::{Debug, Formatter};
-use crate::interpreter_visitor::{Execute, Interpreter};
+use crate::interpreter::ast_interpreter::{Execute, Interpreter};
 use crate::scanner::Token;
 use crate::value::JsValue;
 

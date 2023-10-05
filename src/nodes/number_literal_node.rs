@@ -1,5 +1,4 @@
-use crate::interpreter_visitor::Interpreter;
-use crate::nodes::{AstExpression, AstStatement, Execute, JsValue};
+use crate::nodes::{AstExpression, AstStatement, Execute, Interpreter, JsValue};
 use crate::scanner::Token;
 
 #[derive(Debug, Clone, PartialEq)]

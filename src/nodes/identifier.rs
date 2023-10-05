@@ -1,5 +1,5 @@
 use std::fmt::{Debug, Formatter};
-use crate::interpreter_visitor::{Execute, Interpreter};
+use crate::interpreter::ast_interpreter::{Execute, Interpreter};
 use crate::node::GetSpan;
 use crate::nodes::{AstExpression, AstStatement};
 use crate::scanner::{TextSpan, Token};

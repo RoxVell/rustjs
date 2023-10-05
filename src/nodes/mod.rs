@@ -34,7 +34,7 @@ pub use object_property::*;
 pub use function_signature::*;
 pub use class_declaration::*;
 pub use number_literal_node::NumberLiteralNode;
-pub use crate::interpreter_visitor::{Execute, Interpreter};
+pub use crate::interpreter::ast_interpreter::{Execute, Interpreter};
 pub use crate::node::GetSpan;
 pub use crate::nodes::block_statement::BlockStatementNode;
 pub use crate::nodes::for_statement::ForStatementNode;

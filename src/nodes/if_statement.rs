@@ -1,5 +1,4 @@
-use crate::interpreter_visitor::Interpreter;
-use crate::nodes::{AstExpression, AstStatement, Execute, JsValue};
+use crate::nodes::{AstExpression, AstStatement, Execute, Interpreter, JsValue};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct IfStatementNode {

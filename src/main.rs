@@ -7,7 +7,6 @@ mod keywords;
 mod visitor;
 mod symbol_checker;
 mod diagnostic;
-mod interpreter_visitor;
 mod nodes;
 use nodes::*;
 use std::cell::RefCell;
@@ -16,6 +15,7 @@ use std::rc::Rc;
 use crate::parser::Parser;
 use diagnostic::DiagnosticBag;
 use crate::symbol_checker::symbol_checker::SymbolChecker;
+use crate::interpreter::ast_interpreter::Interpreter;
 
 fn eval(code: &str, is_debug: bool) {
     if is_debug {
@@ -36,7 +36,7 @@ fn eval(code: &str, is_debug: bool) {
         println!("{:#?}", ast);
     }
 
-    let mut diagnostic_bag_ref = Rc::new(RefCell::new(DiagnosticBag::new()));
+    let diagnostic_bag_ref = Rc::new(RefCell::new(DiagnosticBag::new()));
     let mut symbol_checker = SymbolChecker::new(code, Rc::clone(&diagnostic_bag_ref));
     symbol_checker.check_symbols(&ast);
 
@@ -90,7 +90,7 @@ fn eval_file(file_path: &str) {
 
 fn repl() {
     let mut parser = Parser::default();
-    let mut interpreter = Interpreter::default();
+    let interpreter = Interpreter::default();
 
     let mut line = String::new();
 
