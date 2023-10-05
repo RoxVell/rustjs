@@ -1,6 +1,7 @@
 pub mod object;
 pub mod function;
 
+use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::fmt::{Debug, Display, Formatter};
 use std::ops;
@@ -96,6 +97,17 @@ impl From<bool> for JsValue {
 impl From<String> for JsValue {
     fn from(value: String) -> Self {
         JsValue::String(value)
+    }
+}
+
+impl PartialOrd for JsValue {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        match (self, other) {
+            (JsValue::Number(left_number), JsValue::Number(right_number)) => {
+                left_number.partial_cmp(right_number)
+            },
+            _ => None
+        }
     }
 }
 
