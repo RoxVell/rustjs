@@ -1,4 +1,4 @@
-mod interpreter;
+// mod interpreter;
 mod node;
 mod parser;
 mod scanner;
@@ -8,14 +8,36 @@ mod visitor;
 mod symbol_checker;
 mod diagnostic;
 mod nodes;
+mod bytecode;
+mod interpreter;
+
 use nodes::*;
 use std::cell::RefCell;
 use std::fs;
 use std::rc::Rc;
 use crate::parser::Parser;
 use diagnostic::DiagnosticBag;
+use crate::bytecode::bytecode_compiler::{BytecodeCompiler, GlobalVariable};
+use crate::bytecode::bytecode_interpreter::VM;
+use crate::bytecode::bytecode_printer::{BytecodePrinter};
 use crate::symbol_checker::symbol_checker::SymbolChecker;
-use crate::interpreter::ast_interpreter::Interpreter;
+
+fn get_globals() -> Vec<GlobalVariable> {
+    fn console_log(_: &VM, arguments: &[JsValue]) -> Result<JsValue, String> {
+        let result = arguments
+            .iter()
+            .map(|arg| format!("{}", arg))
+            .collect::<Vec<String>>()
+            .join(" ");
+        println!("{result}");
+        return Ok(JsValue::Undefined);
+    }
+
+    vec![
+        GlobalVariable::new("print".to_string(), JsValue::native_bytecode_function(console_log)),
+        GlobalVariable::new("VERSION".to_string(), JsValue::Number(0.1)),
+    ]
+}
 
 fn eval(code: &str, is_debug: bool) {
     if is_debug {
@@ -27,9 +49,7 @@ fn eval(code: &str, is_debug: bool) {
         }
     }
 
-    let mut parser = Parser::default();
-    let ast = parser
-        .parse(code)
+    let ast = Parser::parse_code_to_ast(code)
         .expect(format!("Error occurred during parsing").as_str());
 
     if is_debug {
@@ -48,17 +68,40 @@ fn eval(code: &str, is_debug: bool) {
         error.print_diagnostic();
     }
 
-    if diagnostic_bag_ref.borrow().errors.len() == 0 {
-        let mut interpreter = Interpreter::default();
-        let result = interpreter
-            .interpret(&ast)
-            .expect("Error during evaluating node");
+    println!("{}", diagnostic_bag_ref.borrow().errors.len());
 
-        println!("> {}", result);
-        // match result {
-        //     None => println!("No Value"),
-        //     Some(value) => println!("> {}", value),
-        // }
+    if diagnostic_bag_ref.borrow().errors.len() == 0 {
+        let globals = get_globals();
+
+        let mut bytecode_compiler = BytecodeCompiler::new(globals);
+        bytecode_compiler.compile(&ast);
+
+        let code_blocks = &bytecode_compiler.code_blocks;
+
+        let globals = bytecode_compiler.get_globals();
+
+        for code_block in code_blocks {
+            let bytecode_printer = BytecodePrinter::new(code_block, &globals);
+            bytecode_printer.print();
+        }
+
+        let mut interpreter = VM::new(globals);
+
+        println!("\n------- EVAL BEGIN --------");
+        interpreter.eval(bytecode_compiler.code_blocks.last().unwrap().clone());
+        println!("-------- EVAL END ---------\n");
+
+        println!("result stack:");
+        println!("{:?}", interpreter.dump_stack());
+
+        println!();
+
+        let result = interpreter.stack.last();
+
+        match result {
+            None => println!("> No Value"),
+            Some(value) => println!("> {}", value),
+        }
     }
 }
 

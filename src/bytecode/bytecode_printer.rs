@@ -1,68 +1,90 @@
 use std::cell::Cell;
-use crate::bytecode::bytecode_generator::CodeBlock;
-use crate::bytecode::opcode::OpCode;
+use crate::bytecode::bytecode_compiler::{CodeBlock, GlobalVariable};
+use crate::bytecode::opcodes::Opcode;
 
-struct BytecodePrinter<'a> {
+pub struct BytecodePrinter<'a> {
     pos: Cell<usize>,
-    code_block: &'a CodeBlock,
+    pub code_block: &'a CodeBlock,
+    pub globals: &'a [GlobalVariable],
 }
 
 impl<'a> BytecodePrinter<'a> {
-    fn new(code_block: &'a CodeBlock) -> Self {
+    pub fn new(code_block: &'a CodeBlock, globals: &'a [GlobalVariable]) -> Self {
         Self {
             pos: Cell::new(0),
-            code_block
+            code_block,
+            globals
         }
     }
 
     pub fn print(&self) {
+        println!("------- BEGIN {:?}-------", self.code_block.name);
+
         while self.pos.get() < self.code_block.bytecode.len() {
-            print!("{}\t", self.pos.get());
-            let opcode: OpCode = self.read_byte().into();
+            print!("{:#04X}\t", self.pos.get());
+            let opcode: Opcode = self.read_byte().into();
 
             match opcode {
-                OpCode::PushLiteral => {
+                Opcode::PushLiteral => {
                     let index = self.read_byte();
                     println!("PushLiteral\tindex #{} ({})", index, self.code_block.constants[index as usize]);
                 },
-                OpCode::PushTrue => println!("PushTrue"),
-                OpCode::PushFalse => println!("PushFalse"),
-                OpCode::Pop => println!("Pop"),
-                OpCode::Add => println!("Add"),
-                OpCode::Sub => println!("Sub"),
-                OpCode::Mul => println!("Mul"),
-                OpCode::Div => println!("Div"),
-                OpCode::Eq => println!("Eq"),
-                OpCode::Neq => println!("Neq"),
-                OpCode::MulMul => println!("MulMul"),
-                OpCode::LessOrEqual => println!("LessOrEqual"),
-                OpCode::Less => println!("Less"),
-                OpCode::MoreOrEqual => println!("MoreOrEqual"),
-                OpCode::More => println!("More"),
-                OpCode::Or => println!("Or"),
-                OpCode::And => println!("And"),
-                OpCode::Jump => {
-                    let index = self.read_byte();
-                    println!("Jump\t\t{index}");
+                Opcode::PushTrue => println!("PushTrue"),
+                Opcode::PushFalse => println!("PushFalse"),
+                Opcode::Add => println!("Add"),
+                Opcode::Sub => println!("Sub"),
+                Opcode::Mul => println!("Mul"),
+                Opcode::Div => println!("Div"),
+                Opcode::Eq => println!("Eq"),
+                Opcode::Neq => println!("Neq"),
+                Opcode::MulMul => println!("MulMul"),
+                Opcode::LessOrEqual => println!("LessOrEqual"),
+                Opcode::Return => println!("Return"),
+                Opcode::SetProp => println!("SetProp"),
+                Opcode::GetProp => println!("GetProp"),
+                Opcode::Less => println!("Less"),
+                Opcode::MoreOrEqual => println!("MoreOrEqual"),
+                Opcode::More => println!("More"),
+                Opcode::Or => println!("Or"),
+                Opcode::And => println!("And"),
+                Opcode::Pop => println!("Pop"),
+                Opcode::ExitScope => {
+                    let n_pop = self.read_byte();
+                    println!("ExitScope\t{n_pop}");
                 },
-                OpCode::JumpIfFalse => {
+                Opcode::Jump => {
                     let index = self.read_byte();
-                    println!("JumpIfFalse\t{index}");
+                    println!("Jump\t\t{:#04X}", index);
+                },
+                Opcode::JumpIfFalse => {
+                    let index = self.read_byte();
+                    println!("JumpIfFalse\t{index:#04X}");
                 }
-                OpCode::Halt => println!("Halt"),
+                Opcode::SetVar => {
+                    let index = self.read_byte();
+                    println!("SetVar\t\t{index} ({})", self.code_block.locals[index as usize].name);
+                },
+                Opcode::GetVar => {
+                    let index = self.read_byte();
+                    println!("GetVar\t\t{index} ({})", self.code_block.locals[index as usize].name);
+                },
+                Opcode::GetGlobal => {
+                    let index = self.read_byte();
+                    println!("GetGlobal\t{index} ({})", self.globals[index as usize].name);
+                },
+                Opcode::Call => {
+                    let params_count = self.read_byte();
+                    println!("Call\t\t{params_count}");
+                }
             }
         }
+        println!("-------- END {:?}--------\n", self.code_block.name);
     }
 
-    fn read_byte(&self) -> u8 {
+    pub(crate) fn read_byte(&self) -> u8 {
         let current_pos = self.pos.get();
         let byte = self.code_block.bytecode[current_pos];
         self.pos.set(current_pos + 1);
         byte
     }
-}
-
-pub fn print_code_block(code_block: &CodeBlock) {
-    let bytecode_printer = BytecodePrinter::new(code_block);
-    bytecode_printer.print();
 }

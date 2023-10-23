@@ -1,17 +1,33 @@
-use ariadne::{Color, Label, Report, ReportKind, Source};
+use ariadne::{Color, Config, Fmt, Label, Report, ReportKind, Source};
 use crate::diagnostic::PrintDiagnostic;
 use crate::keywords::{BREAK_KEYWORD, THIS_KEYWORD};
 use crate::scanner::TextSpan;
 
 #[derive(Debug)]
 pub struct ConstantAssigningDiagnostic {
+    pub variable_name: String,
+    pub declaration_span: TextSpan,
     pub id_span: TextSpan,
 }
 
 impl PrintDiagnostic for ConstantAssigningDiagnostic {
     fn print_diagnostic(&self, source: &str) {
-        // TODO: add filename
-        report_symbol_diagnostic(ReportKind::Error, "assignment to constant variable.", &self.id_span, "a.js", source);
+        let filename = "a.js";
+
+        Report::build(ReportKind::Error, filename, self.declaration_span.start.row)
+            .with_message("assignment to constant variable.")
+            .with_labels([
+                Label::new((filename, self.declaration_span.start.row..self.declaration_span.end.row))
+                    .with_color(Color::Blue)
+                    .with_message(format!("first assignment to `{}`", self.variable_name)),
+                Label::new((filename, self.id_span.start.row..self.id_span.end.row))
+                    .with_color(Color::Red)
+                    .with_message("cannot assign twice to constant variable".fg(Color::Red)),
+            ])
+            .with_note(format!("consider making this binding mutable: `let {}`", self.variable_name))
+            .finish()
+            .print((filename, Source::from(source)))
+            .unwrap();
     }
 }
 
@@ -92,6 +108,28 @@ impl PrintDiagnostic for WrongBreakContextDiagnostic {
         report_wrong_keyword_context(
             BREAK_KEYWORD,
             "keyword 'break' can be used only inside while / for loops",
+            span,
+            filename,
+            source,
+        );
+    }
+}
+
+#[derive(Debug)]
+pub struct ManualImplOfAssignOperationDiagnostic {
+    pub span: TextSpan,
+}
+
+impl PrintDiagnostic for ManualImplOfAssignOperationDiagnostic {
+    // TODO: add advice for shorten assignment
+    fn print_diagnostic(&self, source: &str) {
+        let span = &self.span;
+        // TODO: add filename
+        let filename = "a.js";
+
+        report_symbol_diagnostic(
+            ReportKind::Warning,
+            "manual implementation of assign operation",
             span,
             filename,
             source,

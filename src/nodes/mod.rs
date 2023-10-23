@@ -161,6 +161,8 @@ impl GetSpan for AstExpression {
             AstExpression::NullLiteral(node) => node.span.clone(),
             AstExpression::UndefinedLiteral(node) => node.span.clone(),
             AstExpression::Identifier(node) => node.token.span.clone(),
+            AstExpression::MemberExpression(node) => TextSpan::new(node.object.get_span().start, node.property.get_span().end),
+            AstExpression::BinaryExpression(node) => TextSpan::new(node.left.get_span().start, node.right.get_span().end),
             _ => todo!()
             // AstExpression::ThisExpression(_) => {}
             // AstExpression::BinaryExpression(_) => {}

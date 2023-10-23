@@ -2,7 +2,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use crate::interpreter::environment::{Environment, EnvironmentRef};
 use crate::nodes::{AstExpression, AstStatement, FunctionArgument};
-use crate::value::function::{Callable, JsFunction, JsFunctionArg};
+use crate::value::function::{AstCallable, JsFunction, JsFunctionArg, NativeCallable};
 use crate::value::JsValue;
 use crate::value::object::{JsObject, ObjectKind};
 
@@ -90,7 +90,7 @@ impl Interpreter {
                                     .unwrap();
                             });
                         self.set_environment(function_execution_environment);
-                        let result = function.call(self, &values).unwrap();
+                        let result = function.call(self).unwrap();
 
                         if let JsValue::Object(result_object) = &result {
                             let proto = object.borrow().get_prototype();
@@ -106,10 +106,11 @@ impl Interpreter {
                     }
                     JsFunction::Native(function) => {
                         self.set_environment(function_execution_environment);
-                        let result = function.call(self, &values);
+                        let result = function.call_fn(&values);
                         self.pop_environment();
                         return result;
                     }
+                    _ => unreachable!()
                 }
             }
         }
@@ -173,7 +174,7 @@ pub trait Execute {
 }
 
 fn get_global_environment() -> Environment {
-    fn console_log(_: &Interpreter, arguments: &Vec<JsValue>) -> Result<JsValue, String> {
+    fn console_log(arguments: &[JsValue]) -> Result<JsValue, String> {
         let result = arguments
             .iter()
             .map(|arg| format!("{}", arg))
@@ -183,10 +184,7 @@ fn get_global_environment() -> Environment {
         return Ok(JsValue::Undefined);
     }
 
-    fn set_prototype(
-        _: &Interpreter,
-        arguments: &Vec<JsValue>,
-    ) -> Result<JsValue, String> {
+    fn set_prototype(arguments: &[JsValue]) -> Result<JsValue, String> {
         let target = arguments
             .get(0)
             .expect("Expected first argument to be a target");
@@ -216,7 +214,7 @@ fn get_global_environment() -> Environment {
         return Ok(JsValue::Undefined);
     }
 
-    fn performance_now(_: &Interpreter, _: &Vec<JsValue>) -> Result<JsValue, String> {
+    fn performance_now(_: &[JsValue]) -> Result<JsValue, String> {
         return Ok(JsValue::Number(
             std::time::SystemTime::now()
                 .duration_since( std::time::SystemTime::UNIX_EPOCH)
@@ -225,7 +223,7 @@ fn get_global_environment() -> Environment {
         ));
     }
 
-    fn object_keys(_: &Interpreter, args: &Vec<JsValue>) -> Result<JsValue, String> {
+    fn object_keys(args: &[JsValue]) -> Result<JsValue, String> {
         assert_eq!(args.len(), 1);
 
         if let JsValue::Object(object) = &args[0] {
@@ -236,7 +234,7 @@ fn get_global_environment() -> Environment {
         return Err("First arguments should be an object".to_string());
     }
 
-    fn object_values(_: &Interpreter, args: &Vec<JsValue>) -> Result<JsValue, String> {
+    fn object_values(args: &[JsValue]) -> Result<JsValue, String> {
         assert_eq!(args.len(), 1);
 
         if let JsValue::Object(object) = &args[0] {
@@ -247,7 +245,7 @@ fn get_global_environment() -> Environment {
         return Err("First arguments should be an object".to_string());
     }
 
-    fn object_entries(_: &Interpreter, args: &Vec<JsValue>) -> Result<JsValue, String> {
+    fn object_entries(args: &[JsValue]) -> Result<JsValue, String> {
         assert_eq!(args.len(), 1);
 
         if let JsValue::Object(object) = &args[0] {
@@ -302,7 +300,7 @@ impl Default for Interpreter {
 }
 
 pub fn eval_code(code: &str) -> JsValue {
-    let mut interpreter = Interpreter::default();
+    let interpreter = Interpreter::default();
 
     let ast = crate::parser::Parser::parse_code_to_ast(code)
         .expect(format!("Error occurred during parsing").as_str());

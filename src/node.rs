@@ -1,5 +1,4 @@
 use crate::scanner::TextSpan;
-use std::fmt::Debug;
 use crate::keywords::{CONST_KEYWORD, FALSE_KEYWORD, LET_KEYWORD, TRUE_KEYWORD};
 use crate::nodes::*;
 use crate::visitor::Visitor;

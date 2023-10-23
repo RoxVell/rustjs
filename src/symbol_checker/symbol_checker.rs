@@ -1,11 +1,12 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 use std::collections::HashMap;
+use std::env::var;
 use crate::diagnostic::{Diagnostic, DiagnosticBagRef, DiagnosticKind};
 use crate::nodes::*;
 // use crate::node::{AssignmentExpressionNode, AstExpression, AstStatement, BlockStatementNode, ClassDeclarationNode, ForStatementNode, FunctionDeclarationNode, GetSpan, IdentifierNode, VariableDeclarationKind, VariableDeclarationNode, WhileStatementNode};
 use crate::scanner::{TextSpan, Token};
-use crate::symbol_checker::diagnostics::{ConstantAssigningDiagnostic, MultipleAssignmentDiagnostic, UnusedVariableDiagnostic, VariableNotDefinedDiagnostic, WrongBreakContextDiagnostic, WrongThisContextDiagnostic};
+use crate::symbol_checker::diagnostics::{ConstantAssigningDiagnostic, ManualImplOfAssignOperationDiagnostic, MultipleAssignmentDiagnostic, UnusedVariableDiagnostic, VariableNotDefinedDiagnostic, WrongBreakContextDiagnostic, WrongThisContextDiagnostic};
 use crate::visitor::Visitor;
 
 /// Should traverse ast and find unused variables & assigning to constant variables
@@ -156,6 +157,18 @@ impl LightEnvironment {
         }
     }
 
+    fn get_symbol_span(&self, variable_name: &str) -> Option<TextSpan> {
+        if self.symbols.contains_key(variable_name) {
+            return Some(self.symbols.get(variable_name).unwrap().span.clone());
+        }
+
+        if let Some(parent) = &self.parent {
+            return parent.borrow_mut().get_symbol_span(variable_name);
+        }
+
+        None
+    }
+
     fn assign_variable(&mut self, variable_name: &str) -> Option<AssignVariableResult> {
         if self.symbols.contains_key(variable_name) {
             let symbol = self.symbols.get(variable_name).unwrap();
@@ -199,20 +212,40 @@ impl<'a> Visitor for SymbolChecker<'a> {
     }
 
     fn visit_assignment_expression(&mut self, stmt: &AssignmentExpressionNode) {
+        // check for manual implementation of assign operation
+        if let AstExpression::BinaryExpression(expr) = stmt.right.as_ref() {
+            if expr.left == stmt.left {
+                self.diagnostic_bag.borrow_mut().report_warning(
+                    Diagnostic::new(DiagnosticKind::ManualImplOfAssignOperation(
+                        ManualImplOfAssignOperationDiagnostic { span: stmt.get_span() }
+                    ), self.source)
+                );
+            }
+        }
+
         match &stmt.left.as_ref() {
             AstExpression::Identifier(id_node) => {
                 self.visit_identifier_node(id_node);
 
+                let variable_name = &id_node.id;
+
                 let diagnostic = self.environment.borrow()
                     .borrow_mut()
-                    .assign_variable(&id_node.id);
+                    .assign_variable(variable_name);
 
                 if diagnostic.is_some() {
                     match diagnostic.unwrap() {
                         AssignVariableResult::ConstantAssigning => {
+                            let declaration_span = self.environment.borrow()
+                                .borrow_mut().get_symbol_span(variable_name).unwrap();
+
                             self.diagnostic_bag.borrow_mut().report_error(
                                 Diagnostic::new(DiagnosticKind::ConstantAssigning(
-                                    ConstantAssigningDiagnostic { id_span: stmt.left.get_span() }
+                                    ConstantAssigningDiagnostic {
+                                        variable_name: variable_name.clone(),
+                                        declaration_span,
+                                        id_span: stmt.left.get_span(),
+                                    }
                                 ), self.source)
                             );
                         }

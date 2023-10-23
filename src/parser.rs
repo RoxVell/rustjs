@@ -223,6 +223,11 @@ impl Parser {
         self.eat(&TokenKind::OpenBrace);
 
         while let Some(token) = &self.current_token {
+            if let TokenKind::Comment(_) = &token.token {
+                self.next_token();
+                continue;
+            }
+
             if &token.token == &TokenKind::CloseBrace {
                 self.eat(&TokenKind::CloseBrace);
                 break;

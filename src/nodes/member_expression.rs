@@ -6,7 +6,7 @@ use crate::value::JsValue;
 pub struct MemberExpressionNode {
     pub computed: bool,
     pub object: Box<AstExpression>,
-    pub property: Box<AstExpression>, // TODO: maybe type
+    pub property: Box<AstExpression>,
 }
 
 impl Execute for MemberExpressionNode {
@@ -20,6 +20,5 @@ impl Execute for MemberExpressionNode {
             },
             _ => Err("Is not an object".to_string())
         }
-
     }
 }

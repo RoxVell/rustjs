@@ -188,10 +188,25 @@ pub struct TextSpan {
     pub end: Span,
 }
 
-#[derive(Clone, PartialEq)]
+impl TextSpan {
+    pub fn new(start: Span, end: Span) -> Self {
+        Self {
+            start,
+            end,
+        }
+    }
+}
+
+#[derive(Clone)]
 pub struct Token {
     pub token: TokenKind,
     pub span: TextSpan,
+}
+
+impl PartialEq for Token {
+    fn eq(&self, other: &Self) -> bool {
+        self.token == other.token
+    }
 }
 
 impl Debug for Token {
