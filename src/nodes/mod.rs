@@ -1,4 +1,6 @@
 mod string_literal_node;
+
+use enum_dispatch::enum_dispatch;
 pub use string_literal_node::StringLiteralNode;
 mod boolean_literal_node;
 pub use boolean_literal_node::BooleanLiteralNode;
@@ -29,23 +31,29 @@ mod object_property;
 mod object_expression;
 mod new_expression;
 mod this_expression;
+mod null_literal_node;
+mod undefined_literal_node;
+mod template_string_literal;
+mod unary_expression;
 
 pub use object_property::*;
 pub use function_signature::*;
 pub use class_declaration::*;
 pub use number_literal_node::NumberLiteralNode;
-pub use crate::interpreter::ast_interpreter::{Execute, Interpreter};
+pub use crate::interpreter::ast_interpreter::Interpreter;
 pub use crate::node::GetSpan;
 pub use crate::nodes::block_statement::BlockStatementNode;
 pub use crate::nodes::for_statement::ForStatementNode;
 pub use crate::nodes::identifier::IdentifierNode;
 pub use crate::nodes::program::ProgramNode;
 pub use crate::nodes::return_statement::ReturnStatementNode;
-pub use crate::nodes::variable_declaration::{VariableDeclarationNode, VariableDeclarationKind};
+pub use crate::nodes::variable_declaration::{VariableDeclarationKind, VariableDeclarationNode};
 pub use crate::nodes::while_statement::WhileStatementNode;
 pub use crate::scanner::{TextSpan, Token};
 pub use crate::value::JsValue;
 pub use function_argument::FunctionArgument;
+pub use null_literal_node::NullLiteralNode;
+pub use undefined_literal_node::UndefinedLiteralNode;
 pub use crate::nodes::array_expression::ArrayExpressionNode;
 pub use crate::nodes::assignment_expression::{AssignmentExpressionNode, AssignmentOperator};
 pub use crate::nodes::binary_expression::{BinaryExpressionNode, BinaryOperator};
@@ -56,7 +64,9 @@ pub use crate::nodes::function_expression::FunctionExpressionNode;
 pub use crate::nodes::member_expression::MemberExpressionNode;
 pub use crate::nodes::new_expression::NewExpressionNode;
 pub use crate::nodes::object_expression::ObjectExpressionNode;
+pub use crate::nodes::template_string_literal::{TemplateStringLiteralNode, TemplateElement};
 pub use crate::nodes::this_expression::ThisExpressionNode;
+pub use crate::nodes::unary_expression::{UnaryExpressionNode, UnaryOperator};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum AstStatement {
@@ -101,19 +111,15 @@ impl Execute for AstStatement {
     }
 }
 
-impl Into<AstStatement> for AstExpression {
-    fn into(self) -> AstStatement {
-        AstStatement::ExpressionStatement(self)
-    }
-}
-
 #[derive(Debug, Clone, PartialEq)]
+#[enum_dispatch(Execute)]
 pub enum AstExpression {
     StringLiteral(StringLiteralNode),
+    TemplateStringLiteral(TemplateStringLiteralNode),
     NumberLiteral(NumberLiteralNode),
     BooleanLiteral(BooleanLiteralNode),
-    NullLiteral(Token),
-    UndefinedLiteral(Token),
+    NullLiteral(NullLiteralNode),
+    UndefinedLiteral(UndefinedLiteralNode),
     ThisExpression(ThisExpressionNode),
     Identifier(IdentifierNode),
     BinaryExpression(BinaryExpressionNode),
@@ -126,29 +132,12 @@ pub enum AstExpression {
     ObjectExpression(ObjectExpressionNode),
     ClassDeclaration(ClassDeclarationNode),
     ArrayExpression(ArrayExpressionNode),
+    UnaryExpression(UnaryExpressionNode),
 }
 
-impl Execute for AstExpression {
-    fn execute(&self, interpreter: &Interpreter) -> Result<JsValue, String> {
-        match self {
-            AstExpression::StringLiteral(node) => node.execute(interpreter),
-            AstExpression::NumberLiteral(node) => node.execute(interpreter),
-            AstExpression::BooleanLiteral(node) => node.execute(interpreter),
-            AstExpression::NullLiteral(_) => Ok(JsValue::Null),
-            AstExpression::UndefinedLiteral(_) => Ok(JsValue::Undefined),
-            AstExpression::ThisExpression(node) => node.execute(interpreter),
-            AstExpression::Identifier(node) => node.execute(interpreter),
-            AstExpression::BinaryExpression(node) => node.execute(interpreter),
-            AstExpression::AssignmentExpression(node) => node.execute(interpreter),
-            AstExpression::FunctionExpression(node) => node.execute(interpreter),
-            AstExpression::CallExpression(node) => node.execute(interpreter),
-            AstExpression::ConditionalExpression(node) => node.execute(interpreter),
-            AstExpression::MemberExpression(node) => node.execute(interpreter),
-            AstExpression::NewExpression(node) => node.execute(interpreter),
-            AstExpression::ObjectExpression(node) => node.execute(interpreter),
-            AstExpression::ClassDeclaration(node) => node.execute(interpreter),
-            AstExpression::ArrayExpression(node) => node.execute(interpreter),
-        }
+impl Into<AstStatement> for AstExpression {
+    fn into(self) -> AstStatement {
+        AstStatement::ExpressionStatement(self)
     }
 }
 
@@ -158,8 +147,8 @@ impl GetSpan for AstExpression {
             AstExpression::StringLiteral(node) => node.token.span.clone(),
             AstExpression::NumberLiteral(node) => node.token.span.clone(),
             AstExpression::BooleanLiteral(node) => node.token.span.clone(),
-            AstExpression::NullLiteral(node) => node.span.clone(),
-            AstExpression::UndefinedLiteral(node) => node.span.clone(),
+            AstExpression::NullLiteral(node) => node.0.span.clone(),
+            AstExpression::UndefinedLiteral(node) => node.0.span.clone(),
             AstExpression::Identifier(node) => node.token.span.clone(),
             AstExpression::MemberExpression(node) => TextSpan::new(node.object.get_span().start, node.property.get_span().end),
             AstExpression::BinaryExpression(node) => TextSpan::new(node.left.get_span().start, node.right.get_span().end),
@@ -177,4 +166,9 @@ impl GetSpan for AstExpression {
             // AstExpression::ArrayExpression(_) => {}
         }
     }
+}
+
+#[enum_dispatch]
+pub trait Execute {
+    fn execute(&self, interpreter: &Interpreter) -> Result<JsValue, String>;
 }

@@ -1,5 +1,5 @@
-use crate::interpreter::ast_interpreter::{Execute, Interpreter};
-use crate::nodes::AstExpression;
+use crate::interpreter::ast_interpreter::{Interpreter};
+use crate::nodes::{AstExpression, Execute};
 use crate::nodes::function_signature::FunctionSignature;
 use crate::nodes::identifier::IdentifierNode;
 use crate::value::function::JsFunction;
@@ -75,9 +75,9 @@ impl ClassDeclarationNode {
     }
 }
 
-impl Into<AstExpression> for ClassDeclarationNode {
-    fn into(self) -> AstExpression {
-        AstExpression::ClassDeclaration(self)
-    }
-}
+// impl Into<AstExpression> for ClassDeclarationNode {
+//     fn into(self) -> AstExpression {
+//         AstExpression::ClassDeclaration(self)
+//     }
+// }
 

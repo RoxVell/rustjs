@@ -102,6 +102,58 @@ impl JsValue {
         }
     }
 
+    /// alternative to .toString()
+    pub fn to_js_like_string(&self) -> String {
+        match self {
+            JsValue::Undefined => format!("{UNDEFINED_KEYWORD}"),
+            JsValue::Null => format!("{NULL_KEYWORD}"),
+            JsValue::String(str) => str.to_string(),
+            JsValue::Number(number) => number.to_string(),
+            JsValue::Boolean(value) => format!("{}", if *value { "true" } else { "false" }),
+            JsValue::Object(object) => {
+                match &object.borrow().kind {
+                    ObjectKind::Ordinary => "[object]".to_string(),
+                    ObjectKind::Function(function) => {
+                        match function {
+                            JsFunction::Ordinary(_) => "[function]".to_string(),
+                            JsFunction::Bytecode(function) => format!("[function {}]", function.name),
+                            JsFunction::Native(_) | JsFunction::NativeBytecode(_) => format!("[native function]"),
+                        }
+                    },
+                    ObjectKind::Array => {
+                        let result: Vec<String> = object.borrow().properties
+                            .values()
+                            .map(|x| format!("{x}"))
+                            .collect();
+                        let result = result.join(", ");
+                        format!("[{result}]")
+                    }
+                }
+            },
+        }
+    }
+
+    pub fn unary_plus(self) -> JsValue {
+        match self {
+            JsValue::Number(value) => JsValue::Number(value.abs()),
+            _ => panic!("Cannot use plus operator with value type '{}'", self.get_type_as_str())
+        }
+    }
+
+    pub fn unary_minus(self) -> JsValue {
+        match self {
+            JsValue::Number(value) => JsValue::Number(-value),
+            _ => panic!("Cannot use minus operator with value type '{}'", self.get_type_as_str())
+        }
+    }
+
+    pub fn unary_logical_not(self) -> JsValue {
+        match self {
+            JsValue::Boolean(value) => JsValue::Boolean(!value),
+            _ => panic!("Cannot use logical not operator (!) with value type '{}'", self.get_type_as_str())
+        }
+    }
+
     pub fn display_with_no_colors(&self) -> String {
         match self {
             JsValue::Undefined => format!("{UNDEFINED_KEYWORD}"),

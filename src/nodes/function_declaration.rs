@@ -1,4 +1,5 @@
-use crate::interpreter::ast_interpreter::{Execute, Interpreter};
+use crate::interpreter::ast_interpreter::{Interpreter};
+use crate::nodes::Execute;
 use crate::nodes::function_signature::FunctionSignature;
 use crate::value::JsValue;
 use crate::value::object::JsObject;

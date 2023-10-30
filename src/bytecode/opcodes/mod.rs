@@ -62,6 +62,9 @@ pub(crate) enum Opcode {
     Return,
     SetProp,
     GetProp,
+    LogicalNot,
+    UnaryPlus,
+    UnaryMinus,
 }
 
 // #[repr(u8)]
@@ -176,7 +179,7 @@ impl Opcode {
         )
     }
 }
-//
+
 impl Into<Opcode> for u8 {
     fn into(self) -> Opcode {
         match self {
@@ -207,6 +210,9 @@ impl Into<Opcode> for u8 {
             24 => Opcode::Return,
             25 => Opcode::SetProp,
             26 => Opcode::GetProp,
+            27 => Opcode::LogicalNot,
+            28 => Opcode::UnaryPlus,
+            29 => Opcode::UnaryMinus,
             _ => todo!()
         }
     }

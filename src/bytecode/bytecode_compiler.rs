@@ -34,7 +34,7 @@ pub struct CodeBlock {
     pub constants: Vec<JsValue>,
     pub locals: Vec<LocalVariable>,
     pub scope_level: u8,
-    pub arity: u8,
+    pub arguments_count: u8,
 }
 
 impl CodeBlock {
@@ -45,19 +45,19 @@ impl CodeBlock {
             constants: vec![],
             locals: vec![],
             scope_level: 0,
-            arity,
+            arguments_count: arity,
         }
     }
 }
 
-pub struct BytecodeCompiler {
+pub struct BytecodeCompiler<'a> {
     pub code_block: CodeBlock,
     pub code_blocks: Vec<CodeBlock>,
-    pub globals: Vec<GlobalVariable>,
+    pub globals: &'a [GlobalVariable],
 }
 
-impl BytecodeCompiler {
-    pub fn new(globals: Vec<GlobalVariable>) -> Self {
+impl<'a> BytecodeCompiler<'a> {
+    pub fn new(globals: &'a [GlobalVariable]) -> Self {
         Self {
             code_block: CodeBlock::new("main".to_string(), 0),
             code_blocks: vec![],
@@ -76,10 +76,10 @@ impl BytecodeCompiler {
         &self.globals
     }
 
-    fn add_global(&mut self, name: String, value: JsValue) -> u8 {
-        self.globals.push(GlobalVariable { name, value });
-        (self.globals.len() - 1) as u8
-    }
+    // fn add_global(&mut self, name: String, value: JsValue) -> u8 {
+    //     self.globals.push(GlobalVariable { name, value });
+    //     (self.globals.len() - 1) as u8
+    // }
 
     fn get_global_variable_index(&mut self, variable_name: &str) -> u8 {
         self.globals.iter()
@@ -158,7 +158,7 @@ impl BytecodeCompiler {
         });
 
         if self.code_block.name != "main" {
-            n_pop += self.code_block.arity + 1;
+            n_pop += self.code_block.arguments_count + 1;
         }
 
         n_pop
@@ -213,7 +213,7 @@ impl BytecodeCompiler {
     }
 }
 
-impl Visitor for BytecodeCompiler {
+impl<'a> Visitor for BytecodeCompiler<'a> {
     fn visit_statement(&mut self, stmt: &AstStatement) {
         match stmt {
             AstStatement::ProgramStatement(stmt) => self.visit_program_statement(stmt),
@@ -294,8 +294,7 @@ impl Visitor for BytecodeCompiler {
         let co = mem::replace(&mut self.code_block, prev_code_block);
         let constant_idx = self.add_constant(fn_value);
         self.emit(Opcode::PushLiteral, &[constant_idx as u8]);
-        let idx = self.add_local_variable(stmt.function_signature.name.id.clone());
-        self.emit(Opcode::SetVar, &[idx]);
+        self.add_local_variable(stmt.function_signature.name.id.clone());
         self.code_blocks.push(co);
     }
 
@@ -347,26 +346,14 @@ impl Visitor for BytecodeCompiler {
         self.push_literal(JsValue::Number(node.value));
     }
 
-    fn visit_expression(&mut self, stmt: &AstExpression) {
-        match stmt {
-            AstExpression::StringLiteral(node) => self.visit_string_literal(node),
-            AstExpression::NumberLiteral(node) => self.visit_number_literal(node),
-            AstExpression::BooleanLiteral(node) => self.visit_boolean_literal(node),
-            AstExpression::NullLiteral(_) => self.visit_null_literal(),
-            AstExpression::UndefinedLiteral(_) => self.visit_undefined_literal(),
-            AstExpression::ThisExpression(node) => self.visit_this_expression(node),
-            AstExpression::Identifier(node) => self.visit_identifier_node(node),
-            AstExpression::BinaryExpression(node) => self.visit_binary_expression(node),
-            AstExpression::AssignmentExpression(node) => self.visit_assignment_expression(node),
-            AstExpression::FunctionExpression(node) => self.visit_function_expression(node),
-            AstExpression::CallExpression(node) => self.visit_call_expression(node),
-            AstExpression::ConditionalExpression(node) => self.visit_conditional_expression(node),
-            AstExpression::MemberExpression(node) => self.visit_member_expression(node),
-            AstExpression::NewExpression(node) => self.visit_new_expression(node),
-            AstExpression::ObjectExpression(node) => self.visit_object_expression(node),
-            AstExpression::ClassDeclaration(node) => self.visit_class_declaration(node),
-            AstExpression::ArrayExpression(node) => self.visit_array_expression(node),
-        }
+    fn visit_unary_expression(&mut self, node: &UnaryExpressionNode) {
+        self.visit_expression(&node.expression);
+        let opcode = match node.operator {
+            UnaryOperator::Plus => Opcode::UnaryPlus,
+            UnaryOperator::Minus => Opcode::UnaryMinus,
+            UnaryOperator::LogicalNot => Opcode::LogicalNot,
+        };
+        self.emit_opcode(opcode);
     }
 
     fn visit_conditional_expression(&mut self, node: &ConditionalExpressionNode) {
@@ -500,8 +487,6 @@ impl Visitor for BytecodeCompiler {
         }
 
         self.add_local_variable(node.id.id.clone());
-        // println!("visit_variable_declaration: {idx}");
-        // self.emit(Opcode::InitVar, &[idx]);
     }
 
     fn visit_identifier_node(&mut self, node: &IdentifierNode) {

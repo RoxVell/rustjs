@@ -2,7 +2,7 @@ use std::cmp::Ordering;
 use crate::bytecode::bytecode_compiler::{CodeBlock, GlobalVariable};
 use crate::bytecode::opcodes::Opcode;
 use crate::nodes::JsValue;
-use crate::value::function::{JsFunction, VmCallable};
+use crate::value::function::{JsFunction, NativeCallable, VmCallable};
 use crate::value::object::{ObjectKind};
 
 #[derive(Debug)]
@@ -82,6 +82,13 @@ impl<'a> VM<'a> {
                     if let JsValue::Object(object) = &value {
                         if let ObjectKind::Function(function) = &object.borrow().kind {
                             match function {
+                                JsFunction::Native(function) => {
+                                    let mut params: Vec<JsValue> = Vec::with_capacity(params_count as usize);
+                                    for _ in 0..params_count {
+                                        params.insert(0, self.pop());
+                                    }
+                                    function.call_fn(&params).unwrap();
+                                },
                                 JsFunction::NativeBytecode(function) => {
                                     let mut params: Vec<JsValue> = Vec::with_capacity(params_count as usize);
                                     for _ in 0..params_count {
@@ -91,6 +98,9 @@ impl<'a> VM<'a> {
                                 },
                                 JsFunction::Bytecode(function) => {
                                     let new_call_frame = CallFrame::new(self.stack.len() - 1 - params_count as usize, function.clone());
+                                    for _ in 0..function.arguments_count - params_count {
+                                        self.push(JsValue::Undefined);
+                                    }
                                     self.call_stack.push(new_call_frame);
                                     return self.run();
                                 },
@@ -98,6 +108,18 @@ impl<'a> VM<'a> {
                             }
                         }
                     }
+                },
+                Opcode::LogicalNot => {
+                    let value = self.pop();
+                    self.push(value.unary_logical_not());
+                },
+                Opcode::UnaryPlus => {
+                    let value = self.pop();
+                    self.push(value.unary_plus());
+                },
+                Opcode::UnaryMinus => {
+                    let value = self.pop();
+                    self.push(value.unary_minus());
                 },
                 Opcode::Return => {
                     let return_value = self.pop();

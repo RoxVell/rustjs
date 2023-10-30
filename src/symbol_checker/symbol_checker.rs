@@ -1,4 +1,4 @@
-use std::cell::RefCell;
+use std::cell::{Ref, RefCell};
 use std::rc::Rc;
 use std::collections::HashMap;
 use std::env::var;
@@ -42,17 +42,32 @@ impl<'a> SymbolChecker<'a> {
             let usage = current_environment.usages.get(symbol_name);
 
             if usage.is_none() {
-                let symbol = current_environment.symbols.get(symbol_name);
-
-                if let Some(symbol) = symbol {
-                    self.diagnostic_bag.borrow_mut().report_warning(
-                        Diagnostic::new(DiagnosticKind::UnusedVariable(
-                            UnusedVariableDiagnostic { id_span: symbol.span.clone(), variable_name: symbol_name.clone() }
-                        ), self.source)
-                    );
-                }
+                self.report_unused_variable(symbol_name);
             }
         });
+    }
+
+    fn report_unused_variable(&self, variable_name: &str) {
+        let current_environment = self.environment.borrow();
+        let current_environment = current_environment.borrow();
+
+        let symbol = current_environment.symbols.get(variable_name);
+
+        if let Some(symbol) = symbol {
+            self.diagnostic_bag.borrow_mut().report_warning(
+                Diagnostic::new(DiagnosticKind::UnusedVariable(
+                    UnusedVariableDiagnostic { id_span: symbol.span.clone(), variable_name: variable_name.to_string() }
+                ), self.source)
+            );
+        }
+    }
+
+    fn report_variable_not_defined(&self, variable_name: &str, span: TextSpan) {
+        self.diagnostic_bag.borrow_mut().report_error(
+            Diagnostic::new(DiagnosticKind::VariableNotDefined(
+                VariableNotDefinedDiagnostic { variable_name: variable_name.to_string(), id_span: span }
+            ), self.source)
+        );
     }
 
     fn define_variable(&mut self, symbol_name: &str, is_const: bool, span: TextSpan) {
@@ -142,19 +157,34 @@ impl LightEnvironment {
         return None;
     }
 
-    fn add_usage(&mut self, variable_name: &str, span: TextSpan) {
-        if self.symbols.contains_key(variable_name) {
-            if self.usages.contains_key(variable_name) {
-                self.usages.get_mut(variable_name).unwrap().push(span);
+    /// returns true if variable is exists
+    fn add_usage(&mut self, symbol_name: &str, span: TextSpan) -> bool {
+        if self.symbols.contains_key(symbol_name) {
+            if self.usages.contains_key(symbol_name) {
+                self.usages.get_mut(symbol_name).unwrap().push(span);
             } else {
-                self.usages.insert(variable_name.to_string(), vec![span]);
+                self.usages.insert(symbol_name.to_string(), vec![span]);
             }
-            return ();
+            return true;
         }
 
         if let Some(parent) = &self.parent {
-            parent.borrow_mut().add_usage(variable_name, span);
+            return parent.borrow_mut().add_usage(symbol_name, span);
         }
+
+        return false;
+    }
+
+    fn is_symbol_exists(&self, symbol_name: &str) -> bool {
+        if self.symbols.contains_key(symbol_name) {
+            return true;
+        }
+
+        if let Some(parent) = &self.parent {
+            return parent.borrow_mut().is_symbol_exists(symbol_name);
+        }
+
+        return false;
     }
 
     fn get_symbol_span(&self, variable_name: &str) -> Option<TextSpan> {
@@ -213,6 +243,7 @@ impl<'a> Visitor for SymbolChecker<'a> {
 
     fn visit_assignment_expression(&mut self, stmt: &AssignmentExpressionNode) {
         // check for manual implementation of assign operation
+        // TODO: extract a function
         if let AstExpression::BinaryExpression(expr) = stmt.right.as_ref() {
             if expr.left == stmt.left {
                 self.diagnostic_bag.borrow_mut().report_warning(
@@ -250,11 +281,7 @@ impl<'a> Visitor for SymbolChecker<'a> {
                             );
                         }
                         AssignVariableResult::VariableNotDefined => {
-                            self.diagnostic_bag.borrow_mut().report_error(
-                                Diagnostic::new(DiagnosticKind::VariableNotDefined(
-                                    VariableNotDefinedDiagnostic { variable_name: id_node.id.clone(), id_span: stmt.left.get_span() }
-                                ), self.source)
-                            );
+                            self.report_variable_not_defined(&id_node.id, stmt.left.get_span());
                         }
                     }
                 }
@@ -267,7 +294,12 @@ impl<'a> Visitor for SymbolChecker<'a> {
     }
 
     fn visit_identifier_node(&mut self, stmt: &IdentifierNode) {
-        self.environment.borrow().borrow_mut().add_usage(stmt.id.as_str(), stmt.get_span())
+        let symbol_name = stmt.id.as_str();
+        let is_symbol_exists = self.environment.borrow().borrow_mut().add_usage(stmt.id.as_str(), stmt.get_span());
+
+        if !is_symbol_exists {
+            self.report_variable_not_defined(symbol_name, stmt.get_span());
+        }
     }
 
     fn visit_class_declaration(&mut self, stmt: &ClassDeclarationNode) {
@@ -285,9 +317,14 @@ impl<'a> Visitor for SymbolChecker<'a> {
     fn visit_function_declaration(&mut self, stmt: &FunctionDeclarationNode) {
         self.out_break_context();
         self.is_inside_this_context = true;
-        self.visit_function_signature(&stmt.function_signature);
-        self.is_inside_this_context = false;
+
         self.define_variable(stmt.function_signature.name.id.as_str(), false, stmt.function_signature.name.get_span());
+        for arg in &stmt.function_signature.arguments {
+            self.define_variable(&arg.name.id, false, arg.name.get_span());
+        }
+        self.visit_function_signature(&stmt.function_signature);
+
+        self.is_inside_this_context = false;
         self.pop_break_context();
     }
 

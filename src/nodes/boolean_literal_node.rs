@@ -1,4 +1,5 @@
-use crate::interpreter::ast_interpreter::{Execute, Interpreter};
+use crate::interpreter::ast_interpreter::{Interpreter};
+use crate::nodes::Execute;
 use crate::scanner::Token;
 use crate::value::JsValue;
 

@@ -1,7 +1,7 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 use crate::interpreter::environment::{Environment, EnvironmentRef};
-use crate::nodes::{AstExpression, AstStatement, FunctionArgument};
+use crate::nodes::{AstExpression, AstStatement, Execute, FunctionArgument};
 use crate::value::function::{AstCallable, JsFunction, JsFunctionArg, NativeCallable};
 use crate::value::JsValue;
 use crate::value::object::{JsObject, ObjectKind};
@@ -11,6 +11,19 @@ pub struct Interpreter {
 }
 
 impl Interpreter {
+    pub fn new() -> Self {
+        let environment = get_global_environment();
+        Self {
+            environment: RefCell::new(Rc::new(RefCell::new(environment))),
+        }
+    }
+
+    pub fn with_environment(environment: Environment) -> Self {
+        Self {
+            environment: RefCell::new(Rc::new(RefCell::new(environment))),
+        }
+    }
+
     pub fn interpret(&self, statement: &AstStatement) -> Result<JsValue, String> {
         statement.execute(self)
     }
@@ -169,10 +182,6 @@ impl Interpreter {
     }
 }
 
-pub trait Execute {
-    fn execute(&self, interpreter: &Interpreter) -> Result<JsValue, String>;
-}
-
 fn get_global_environment() -> Environment {
     fn console_log(arguments: &[JsValue]) -> Result<JsValue, String> {
         let result = arguments
@@ -262,13 +271,14 @@ fn get_global_environment() -> Environment {
         return Err("First arguments should be an object".to_string());
     }
 
-    Environment::new_with_variables([
+    Environment::with_variables([
         (
             "console".to_string(),
             (true, JsValue::object([
                 ("log".to_string(), JsValue::native_function(console_log)),
             ])),
         ),
+        ("print".to_string(), (true, JsValue::native_function(console_log))),
         (
             "setPrototypeOf".to_string(),
             (true, JsValue::native_function(set_prototype),)
@@ -290,17 +300,17 @@ fn get_global_environment() -> Environment {
     ])
 }
 
-impl Default for Interpreter {
-    fn default() -> Self {
-        let environment = get_global_environment();
-        Self {
-            environment: RefCell::new(Rc::new(RefCell::new(environment))),
-        }
-    }
-}
+// impl Default for Interpreter {
+//     fn default() -> Self {
+//         let environment = get_global_environment();
+//         Self {
+//             environment: RefCell::new(Rc::new(RefCell::new(environment))),
+//         }
+//     }
+// }
 
 pub fn eval_code(code: &str) -> JsValue {
-    let interpreter = Interpreter::default();
+    let interpreter = Interpreter::new();
 
     let ast = crate::parser::Parser::parse_code_to_ast(code)
         .expect(format!("Error occurred during parsing").as_str());
@@ -435,7 +445,7 @@ fn object_expression_works() {
         a;
     ";
 
-    let mut interpreter = Interpreter::default();
+    let mut interpreter = Interpreter::new();
 
     let expected = JsValue::object([
         ("5".to_string(), JsValue::Number(5.0)),
@@ -524,7 +534,7 @@ fn mutate_object_as_reference_works() {
 
 #[test]
 fn object_method_this_expression() {
-    let mut interpreter = Interpreter::default();
+    let mut interpreter = Interpreter::new();
 
     let code = "
         let a = {
@@ -548,7 +558,7 @@ fn object_method_this_expression() {
 
 #[test]
 fn comparison() {
-    let mut interpreter = Interpreter::default();
+    let mut interpreter = Interpreter::new();
 
     assert_eq!(interpret(&mut interpreter, "'abc' == 'abc'"), JsValue::Boolean(true));
     assert_eq!(interpret(&mut interpreter, "'abc' == 'qwe'"), JsValue::Boolean(false));
@@ -563,7 +573,7 @@ fn comparison() {
 
 #[test]
 fn prototype_property_access() {
-    let mut interpreter = Interpreter::default();
+    let mut interpreter = Interpreter::new();
 
     let code = "
         let prototype = {
@@ -579,7 +589,7 @@ fn prototype_property_access() {
 
 #[test]
 fn prototype_mutable_property_access() {
-    let mut interpreter = Interpreter::default();
+    let mut interpreter = Interpreter::new();
 
     let code = "
         let prototype = {
@@ -645,7 +655,7 @@ fn simple_class_usage() {
 
 #[test]
 fn class_proto_of_instance_should_be_equal_to_class_prototype() {
-    let mut interpreter = Interpreter::default();
+    let mut interpreter = Interpreter::new();
 
     let code = "
        class User {
@@ -680,7 +690,7 @@ fn class_proto_of_instance_should_be_equal_to_class_prototype() {
 
 #[test]
 fn prototypes_of_instances_of_same_class_equals() {
-    let mut interpreter = Interpreter::default();
+    let mut interpreter = Interpreter::new();
     let code = "
         class A { constructor(a) { this.a = a; } }
         new A();
@@ -725,4 +735,29 @@ fn attempt_to_reassign_constant_variable_should_error() {
         a = 10;
     ";
     eval_code(code);
+}
+
+#[test]
+fn template_strings_works() {
+    let code = "
+        const a = 5;
+        const b = 'Hello';
+        const c = 'World';
+        `-- before ${a + 2} ${b} ${c} after--`
+    ";
+    assert_eq!(eval_code(code), JsValue::String("-- before 7 Hello World after--".to_string()));
+}
+
+#[test]
+fn negative_number_works() {
+    assert_eq!(eval_code("-1"), JsValue::Number(-1.0));
+    assert_eq!(eval_code("-(-1)"), JsValue::Number(1.0));
+}
+
+#[test]
+fn logical_not_unary_operator_works_with_boolean() {
+    assert_eq!(eval_code("!true"), JsValue::Boolean(false));
+    assert_eq!(eval_code("!false"), JsValue::Boolean(true));
+    assert_eq!(eval_code("!!true"), JsValue::Boolean(true));
+    assert_eq!(eval_code("!!false"), JsValue::Boolean(false));
 }

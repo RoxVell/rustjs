@@ -9,6 +9,9 @@ pub struct BytecodePrinter<'a> {
 }
 
 impl<'a> BytecodePrinter<'a> {
+    const ADDRESS_COLUMN_WIDTH: usize = 10;
+    const OPCODE_NAME_COLUMN_WIDTH: usize = 15;
+
     pub fn new(code_block: &'a CodeBlock, globals: &'a [GlobalVariable]) -> Self {
         Self {
             pos: Cell::new(0),
@@ -18,67 +21,84 @@ impl<'a> BytecodePrinter<'a> {
     }
 
     pub fn print(&self) {
-        println!("------- BEGIN {:?}-------", self.code_block.name);
+        println!("--------------- BEGIN {:?}---------------", self.code_block.name);
 
         while self.pos.get() < self.code_block.bytecode.len() {
-            print!("{:#04X}\t", self.pos.get());
+            let address = format!("{:#06X}", self.pos.get());
+            // print!("{address:<WIDTH$}", WIDTH=Self::ADDRESS_COLUMN_WIDTH);
             let opcode: Opcode = self.read_byte().into();
 
-            match opcode {
+            let (opcode, operands) = match opcode {
                 Opcode::PushLiteral => {
                     let index = self.read_byte();
-                    println!("PushLiteral\tindex #{} ({})", index, self.code_block.constants[index as usize]);
+                    ("PushLiteral".to_string(), format!("index #{} ({})", index, self.code_block.constants[index as usize]))
+                    // println!("PushLiteral\tindex #{} ({})", index, self.code_block.constants[index as usize]);
                 },
-                Opcode::PushTrue => println!("PushTrue"),
-                Opcode::PushFalse => println!("PushFalse"),
-                Opcode::Add => println!("Add"),
-                Opcode::Sub => println!("Sub"),
-                Opcode::Mul => println!("Mul"),
-                Opcode::Div => println!("Div"),
-                Opcode::Eq => println!("Eq"),
-                Opcode::Neq => println!("Neq"),
-                Opcode::MulMul => println!("MulMul"),
-                Opcode::LessOrEqual => println!("LessOrEqual"),
-                Opcode::Return => println!("Return"),
-                Opcode::SetProp => println!("SetProp"),
-                Opcode::GetProp => println!("GetProp"),
-                Opcode::Less => println!("Less"),
-                Opcode::MoreOrEqual => println!("MoreOrEqual"),
-                Opcode::More => println!("More"),
-                Opcode::Or => println!("Or"),
-                Opcode::And => println!("And"),
-                Opcode::Pop => println!("Pop"),
+                Opcode::PushTrue => ("PushTrue".to_string(), "".to_string()),
+                Opcode::PushFalse => ("PushFalse".to_string(), "".to_string()),
+                Opcode::UnaryMinus => ("UnaryMinus".to_string(), "".to_string()),
+                Opcode::UnaryPlus => ("UnaryPlus".to_string(), "".to_string()),
+                Opcode::LogicalNot => ("LogicalNot".to_string(), "".to_string()),
+                Opcode::Add => ("Add".to_string(), "".to_string()),
+                Opcode::Sub => ("Sub".to_string(), "".to_string()),
+                Opcode::Mul => ("Mul".to_string(), "".to_string()),
+                Opcode::Div => ("Div".to_string(), "".to_string()),
+                Opcode::Eq => ("Eq".to_string(), "".to_string()),
+                Opcode::Neq => ("Neq".to_string(), "".to_string()),
+                Opcode::MulMul => ("MulMul".to_string(), "".to_string()),
+                Opcode::LessOrEqual => ("LessOrEqual".to_string(), "".to_string()),
+                Opcode::Return => ("Return".to_string(), "".to_string()),
+                Opcode::SetProp => ("SetProp".to_string(), "".to_string()),
+                Opcode::GetProp => ("GetProp".to_string(), "".to_string()),
+                Opcode::Less => ("Less".to_string(), "".to_string()),
+                Opcode::MoreOrEqual => ("MoreOrEqual".to_string(), "".to_string()),
+                Opcode::More => ("More".to_string(), "".to_string()),
+                Opcode::Or => ("Or".to_string(), "".to_string()),
+                Opcode::And => ("And".to_string(), "".to_string()),
+                Opcode::Pop => ("Pop".to_string(), "".to_string()),
                 Opcode::ExitScope => {
                     let n_pop = self.read_byte();
-                    println!("ExitScope\t{n_pop}");
+                    ("ExitScope".to_string(), n_pop.to_string())
+                    // println!("ExitScope\t{n_pop}");
                 },
                 Opcode::Jump => {
                     let index = self.read_byte();
-                    println!("Jump\t\t{:#04X}", index);
+                    ("Jump".to_string(), format!("{:#04X}", index))
+                    // println!("Jump\t\t{:#04X}", index);
                 },
                 Opcode::JumpIfFalse => {
                     let index = self.read_byte();
-                    println!("JumpIfFalse\t{index:#04X}");
+                    ("JumpIfFalse".to_string(), format!("{index:#04X}"))
+                    // println!("JumpIfFalse\t{index:#04X}");
                 }
                 Opcode::SetVar => {
                     let index = self.read_byte();
-                    println!("SetVar\t\t{index} ({})", self.code_block.locals[index as usize].name);
+                    ("SetVar".to_string(), format!("{index} ({})", self.code_block.locals[index as usize].name))
+                    // println!("SetVar\t\t{index} ({})", self.code_block.locals[index as usize].name);
                 },
                 Opcode::GetVar => {
                     let index = self.read_byte();
-                    println!("GetVar\t\t{index} ({})", self.code_block.locals[index as usize].name);
+                    ("GetVar".to_string(), format!("{index} ({})", self.code_block.locals[index as usize].name))
+                    // println!("GetVar\t\t{index} ({})", self.code_block.locals[index as usize].name);
                 },
                 Opcode::GetGlobal => {
                     let index = self.read_byte();
-                    println!("GetGlobal\t{index} ({})", self.globals[index as usize].name);
+                    ("GetGlobal".to_string(), format!("{index} ({})", self.globals[index as usize].name))
+                    // println!("GetGlobal\t{index} ({})", self.globals[index as usize].name);
                 },
                 Opcode::Call => {
                     let params_count = self.read_byte();
-                    println!("Call\t\t{params_count}");
+                    ("Call".to_string(), params_count.to_string())
+                    // println!("Call\t\t{params_count}");
                 }
-            }
+            };
+            println!("{address:<ADDRESS_WIDTH$}{opcode:<OPCODE_WIDTH$}{operands:<}",
+                ADDRESS_WIDTH=Self::ADDRESS_COLUMN_WIDTH,
+                OPCODE_WIDTH=Self::OPCODE_NAME_COLUMN_WIDTH
+            );
+            // print!("{opcode}")
         }
-        println!("-------- END {:?}--------\n", self.code_block.name);
+        println!("---------------- END {:?}----------------\n", self.code_block.name);
     }
 
     pub(crate) fn read_byte(&self) -> u8 {

@@ -1,7 +1,9 @@
-use crate::scanner::{Scanner, TokenKind, Token};
-use ariadne::{ColorGenerator, Label, Report, ReportKind, Source};
+use crate::scanner::{Scanner, Span, Token, TokenKind};
+use ariadne::{Color, ColorGenerator, Label, Report, ReportKind, Source};
 use crate::nodes::*;
+use crate::nodes::AstExpression::UnaryExpression;
 
+#[derive(Default)]
 pub struct Parser {
     prev_token: Option<Token>,
     current_token: Option<Token>,
@@ -9,30 +11,25 @@ pub struct Parser {
     source: String,
 }
 
-impl Default for Parser {
-    fn default() -> Self {
-        Self {
-            prev_token: None,
-            current_token: None,
-            scanner: Scanner::new("".to_string()),
-            source: String::new(),
-        }
-    }
-}
+pub type AstExpressionResult = Result<AstExpression, String>;
+pub type AstStatementResult = Result<AstStatement, String>;
 
 impl Parser {
-    pub fn parse_code_to_ast(code: &str) -> Result<AstStatement, String> {
+    pub fn parse_code_to_ast(code: &str) -> AstStatementResult {
         let mut parser = Parser::default();
         return parser.parse(code);
     }
 
-    pub fn parse(&mut self, source: &str) -> Result<AstStatement, String> {
+    pub fn set_new_source(&mut self, source: &str) {
         self.source = source.to_string();
         self.scanner = Scanner::new(source.to_string());
+        self.current_token = self.scanner.next_token();
+    }
+
+    pub fn parse(&mut self, source: &str) -> AstStatementResult {
+        self.set_new_source(source);
 
         let mut statements: Vec<AstStatement> = vec![];
-
-        self.current_token = self.scanner.next_token();
 
         while let Some(token) = &self.current_token {
             if let TokenKind::Comment(_) = token.token {
@@ -49,7 +46,7 @@ impl Parser {
         );
     }
 
-    fn parse_statement(&mut self) -> Result<AstStatement, String> {
+    fn parse_statement(&mut self) -> AstStatementResult {
         match self.get_current_token() {
             Some(TokenKind::LetKeyword) | Some(TokenKind::ConstKeyword) => {
                 self.parse_variable_declaration()
@@ -66,14 +63,14 @@ impl Parser {
         }
     }
 
-    fn parse_break_statement(&mut self) -> Result<AstStatement, String> {
+    fn parse_break_statement(&mut self) -> AstStatementResult {
         let token = self.get_copy_current_token();
         self.eat(&TokenKind::BreakKeyword);
         self.eat_if_present(&TokenKind::Semicolon);
         return Ok(AstStatement::BreakStatement(token));
     }
 
-    fn parse_class_expression(&mut self) -> Result<AstExpression, String> {
+    fn parse_class_expression(&mut self) -> AstExpressionResult {
         self.eat(&TokenKind::ClassKeyword);
 
         let class_name_identifier = self.parse_identifier()?;
@@ -118,7 +115,7 @@ impl Parser {
         Ok(ClassMethodNode { function_signature: self.parse_function_signature()? })
     }
 
-    fn parse_for_statement(&mut self) -> Result<AstStatement, String> {
+    fn parse_for_statement(&mut self) -> AstStatementResult {
         self.eat(&TokenKind::ForKeyword);
         self.eat(&TokenKind::OpenParen);
 
@@ -141,7 +138,7 @@ impl Parser {
         );
     }
 
-    fn parse_return_statement(&mut self) -> Result<AstStatement, String> {
+    fn parse_return_statement(&mut self) -> AstStatementResult {
         self.eat(&TokenKind::ReturnKeyword);
         let expression = self.parse_expression().unwrap();
         self.eat_if_present(&TokenKind::Semicolon);
@@ -152,7 +149,7 @@ impl Parser {
         );
     }
 
-    fn parse_function_declaration(&mut self) -> Result<AstStatement, String> {
+    fn parse_function_declaration(&mut self) -> AstStatementResult {
         self.eat(&TokenKind::FunctionKeyword);
         Ok(AstStatement::FunctionDeclaration(FunctionDeclarationNode { function_signature: self.parse_function_signature()? }))
     }
@@ -193,7 +190,7 @@ impl Parser {
         });
     }
 
-    fn parse_while_statement(&mut self) -> Result<AstStatement, String> {
+    fn parse_while_statement(&mut self) -> AstStatementResult {
         self.eat(&TokenKind::WhileKeyword);
         self.eat(&TokenKind::OpenParen);
         let condition = self.parse_expression().unwrap();
@@ -217,7 +214,7 @@ impl Parser {
     //     node
     // }
 
-    fn parse_block_statement(&mut self) -> Result<AstStatement, String> {
+    fn parse_block_statement(&mut self) -> AstStatementResult {
         let mut statements: Vec<AstStatement> = vec![];
 
         self.eat(&TokenKind::OpenBrace);
@@ -259,7 +256,7 @@ impl Parser {
         self.current_token.as_ref().map(|x| &x.token)
     }
 
-    fn parse_variable_declaration(&mut self) -> Result<AstStatement, String> {
+    fn parse_variable_declaration(&mut self) -> AstStatementResult {
         let kind = match self.get_current_token() {
             Some(TokenKind::LetKeyword) => VariableDeclarationKind::Let,
             Some(TokenKind::ConstKeyword) => VariableDeclarationKind::Const,
@@ -268,7 +265,7 @@ impl Parser {
 
         self.next_token();
 
-        if let Some(TokenKind::Identifier(_)) = self.get_current_token() {
+        return if let Some(TokenKind::Identifier(_)) = self.get_current_token() {
             let id = self.parse_identifier()?;
 
             let value = if self.is_current_token_matches(&TokenKind::Equal) {
@@ -284,19 +281,19 @@ impl Parser {
 
             self.eat_if_present(&TokenKind::Semicolon);
 
-            return Ok(
+            Ok(
                 AstStatement::VariableDeclaration(VariableDeclarationNode {
                     id,
                     kind,
                     value,
                 }),
-            );
+            )
         } else {
-            return Err("Identifier is missing in variable declaration".to_string());
+            Err("Identifier is missing in variable declaration".to_string())
         }
     }
 
-    fn parse_expression_statement(&mut self) -> Result<AstStatement, String> {
+    fn parse_expression_statement(&mut self) -> AstStatementResult {
         let expression = self.parse_expression()?;
 
         if self.get_current_token().is_some() && self.is_current_token_matches(&TokenKind::Semicolon) {
@@ -309,7 +306,7 @@ impl Parser {
     fn parse_assignment_expression(
         &mut self,
         expression: AstExpression,
-    ) -> Result<AstExpression, String> {
+    ) -> AstExpressionResult {
         let mut result_expression: AstExpression = expression;
 
         let assignment_tokens = vec![
@@ -340,47 +337,63 @@ impl Parser {
         return Ok(result_expression);
     }
 
-    fn parse_expression(&mut self) -> Result<AstExpression, String> {
+    fn parse_expression(&mut self) -> AstExpressionResult {
         let expression = self.parse_logical_or_expression()?;
         let expression = self.parse_assignment_expression(expression)?;
         return self.parse_conditional_expression(expression);
     }
 
-    fn parse_logical_or_expression(&mut self) -> Result<AstExpression, String> {
+    fn parse_logical_or_expression(&mut self) -> AstExpressionResult {
         return self.parse_binary_expression(&Self::parse_logical_and_expression, &[TokenKind::Or]);
     }
 
-    fn parse_logical_and_expression(&mut self) -> Result<AstExpression, String> {
+    fn parse_logical_and_expression(&mut self) -> AstExpressionResult {
         return self.parse_binary_expression(&Self::parse_equality_expression, &[TokenKind::And]);
     }
 
-    fn parse_addition_binary_expression(&mut self) -> Result<AstExpression, String> {
+    fn parse_addition_binary_expression(&mut self) -> AstExpressionResult {
         return self.parse_binary_expression(
             &Self::parse_multiplicative_and_remainder_binary_expression,
             &[TokenKind::Plus, TokenKind::Minus],
         );
     }
 
-    fn parse_multiplicative_and_remainder_binary_expression(&mut self) -> Result<AstExpression, String> {
+    fn parse_multiplicative_and_remainder_binary_expression(&mut self) -> AstExpressionResult {
         return self.parse_binary_expression(
             &Self::parse_exponentiation_expression,
             &[TokenKind::Mul, TokenKind::Div, TokenKind::Percent],
         );
     }
 
-    fn parse_exponentiation_expression(&mut self) -> Result<AstExpression, String> {
-        return self.parse_binary_expression(&Self::parse_primary_expression, &[TokenKind::MulMul]);
+    fn parse_exponentiation_expression(&mut self) -> AstExpressionResult {
+        return self.parse_binary_expression(&Self::parse_unary_expression, &[TokenKind::MulMul]);
     }
 
-    //    fn function_call_new_computed_member_access(&mut self) -> Result<Node, String> {
-    //        match self.get_current_token() {
-    //            Some(Token::NewKeyword) => return self.parse_new_expression(),
-    //            Some(Token::OpenParen) => return self.parse_call_expression(),
-    //            _ => self.parse
-    //        }
-    //    }
+    fn parse_unary_expression(&mut self) -> AstExpressionResult {
+        let unary_operator = match self.get_current_token() {
+            Some(TokenKind::Minus) => Some(UnaryOperator::Minus),
+            Some(TokenKind::Plus) => Some(UnaryOperator::Plus),
+            Some(TokenKind::Exclamatory) => Some(UnaryOperator::LogicalNot),
+            _ => None,
+        };
 
-    fn parse_comparison_expression(&mut self) -> Result<AstExpression, String> {
+        if unary_operator.is_some() {
+            self.next_token()
+        }
+
+        if let Some(unary_operator) = unary_operator {
+            let expression = self.parse_unary_expression()?;
+
+            return Ok(UnaryExpression(UnaryExpressionNode {
+                operator: unary_operator,
+                expression: Box::new(expression),
+            }));
+        }
+
+        self.parse_primary_expression()
+    }
+
+    fn parse_comparison_expression(&mut self) -> AstExpressionResult {
         return self.parse_binary_expression(
             &Self::parse_addition_binary_expression,
             &[
@@ -392,7 +405,7 @@ impl Parser {
         );
     }
 
-    fn parse_equality_expression(&mut self) -> Result<AstExpression, String> {
+    fn parse_equality_expression(&mut self) -> AstExpressionResult {
         return self.parse_binary_expression(
             &Self::parse_comparison_expression,
             &[
@@ -429,9 +442,9 @@ impl Parser {
 
     fn parse_binary_expression(
         &mut self,
-        side_expression_fn: &impl Fn(&mut Self) -> Result<AstExpression, String>,
+        side_expression_fn: &impl Fn(&mut Self) -> AstExpressionResult,
         tokens: &[TokenKind],
-    ) -> Result<AstExpression, String> {
+    ) -> AstExpressionResult {
         let mut left = side_expression_fn(self);
 
         while let Some(token) = self.get_current_token() {
@@ -456,7 +469,7 @@ impl Parser {
     fn parse_conditional_expression(
         &mut self,
         expression: AstExpression,
-    ) -> Result<AstExpression, String> {
+    ) -> AstExpressionResult {
         if self.is_current_token_matches(&TokenKind::Question) {
             self.eat(&TokenKind::Question);
             let consequent = self.parse_expression()?;
@@ -474,13 +487,14 @@ impl Parser {
         return Ok(expression);
     }
 
-    fn parse_primary_expression(&mut self) -> Result<AstExpression, String> {
+    fn parse_primary_expression(&mut self) -> AstExpressionResult {
         match self.get_current_token() {
             Some(TokenKind::ClassKeyword) => return self.parse_class_expression(),
             Some(TokenKind::OpenSquareBracket) => return self.parse_array_expression(),
             Some(TokenKind::FunctionKeyword) => return self.parse_function_expression(),
             Some(TokenKind::Number(_)) => return self.parse_number_literal(),
             Some(TokenKind::String(_)) => return self.parse_string_literal(),
+            Some(TokenKind::TemplateString(_)) => return self.parse_template_string_literal(),
             Some(TokenKind::Boolean(_)) => return self.parse_bool_literal(),
             Some(TokenKind::Null) => return self.parse_null_literal(),
             Some(TokenKind::Undefined) => return self.parse_undefined_literal(),
@@ -491,7 +505,6 @@ impl Parser {
             Some(TokenKind::NewKeyword) => return self.parse_new_expression(),
             Some(TokenKind::OpenBrace) => return self.parse_object_literal(),
             _ => {
-                let mut colors = ColorGenerator::new();
                 let token = self.current_token.as_ref().unwrap();
 
                 Report::build(ReportKind::Error, (), token.span.start.row)
@@ -499,7 +512,7 @@ impl Parser {
                     .with_label(
                         Label::new(token.span.start.row..token.span.end.row)
                             .with_message("Unexpected token")
-                            .with_color(colors.next()),
+                            .with_color(Color::Red),
                     )
                     .finish()
                     .print(Source::from(&self.source))
@@ -510,14 +523,14 @@ impl Parser {
         }
     }
 
-    fn parse_array_expression(&mut self) -> Result<AstExpression, String> {
+    fn parse_array_expression(&mut self) -> AstExpressionResult {
         self.eat(&TokenKind::OpenSquareBracket);
         let items: Vec<AstExpression> = self.parse_comma_sequence(&TokenKind::CloseSquareBracket, &Self::parse_primary_expression)?.into_iter().collect();
         self.eat(&TokenKind::CloseSquareBracket);
         Ok(AstExpression::ArrayExpression(ArrayExpressionNode { items }))
     }
 
-    fn parse_function_expression(&mut self) -> Result<AstExpression, String> {
+    fn parse_function_expression(&mut self) -> AstExpressionResult {
         self.eat(&TokenKind::FunctionKeyword);
         self.eat(&TokenKind::OpenParen);
 
@@ -535,13 +548,13 @@ impl Parser {
         );
     }
 
-    fn parse_this_expression(&mut self) -> Result<AstExpression, String> {
+    fn parse_this_expression(&mut self) -> AstExpressionResult {
         let token = self.get_copy_current_token();
         self.eat(&TokenKind::ThisKeyword);
         return Ok(AstExpression::ThisExpression(ThisExpressionNode { token }));
     }
 
-    fn parse_object_literal(&mut self) -> Result<AstExpression, String> {
+    fn parse_object_literal(&mut self) -> AstExpressionResult {
         let mut properties: Vec<ObjectPropertyNode> = vec![];
 
         self.eat(&TokenKind::OpenBrace);
@@ -597,7 +610,7 @@ impl Parser {
         };
     }
 
-    fn parse_new_expression(&mut self) -> Result<AstExpression, String> {
+    fn parse_new_expression(&mut self) -> AstExpressionResult {
         self.eat(&TokenKind::NewKeyword);
         let expression = self.parse_call_expression()?;
 
@@ -613,11 +626,11 @@ impl Parser {
         return Err("".to_string());
     }
 
-    fn parse_call_expression(&mut self) -> Result<AstExpression, String> {
+    fn parse_call_expression(&mut self) -> AstExpressionResult {
         return self.parse_call_signature();
     }
 
-    fn parse_member_expression(&mut self) -> Result<AstExpression, String> {
+    fn parse_member_expression(&mut self) -> AstExpressionResult {
         let mut literal = self.parse_literal()?;
 
         loop {
@@ -651,7 +664,7 @@ impl Parser {
         return Ok(literal);
     }
 
-    fn parse_call_signature(&mut self) -> Result<AstExpression, String> {
+    fn parse_call_signature(&mut self) -> AstExpressionResult {
         let literal = self.parse_member_expression()?;
 
         if self.is_callee(&literal) && self.is_current_token_matches(&TokenKind::OpenParen) {
@@ -679,11 +692,12 @@ impl Parser {
         }
     }
 
-    fn parse_literal(&mut self) -> Result<AstExpression, String> {
+    fn parse_literal(&mut self) -> AstExpressionResult {
         match self.get_current_token() {
             Some(TokenKind::ThisKeyword) => return self.parse_this_expression(),
             Some(TokenKind::Number(_)) => return self.parse_number_literal(),
             Some(TokenKind::String(_)) => return self.parse_string_literal(),
+            Some(TokenKind::TemplateString(_)) => return self.parse_template_string_literal(),
             Some(TokenKind::Boolean(_)) => return self.parse_bool_literal(),
             Some(TokenKind::Null) => return self.parse_null_literal(),
             Some(TokenKind::Undefined) => return self.parse_undefined_literal(),
@@ -694,14 +708,14 @@ impl Parser {
         }
     }
 
-    fn parse_paranthesised_expression(&mut self) -> Result<AstExpression, String> {
+    fn parse_paranthesised_expression(&mut self) -> AstExpressionResult {
         self.eat(&TokenKind::OpenParen);
         let expression = self.parse_expression();
         self.eat(&TokenKind::CloseParen);
         return expression;
     }
 
-    fn parse_bool_literal(&mut self) -> Result<AstExpression, String> {
+    fn parse_bool_literal(&mut self) -> AstExpressionResult {
         if let Some(TokenKind::Boolean(value)) = self.get_current_token() {
             let value = if value == "true" { true } else { false };
             let token = self.get_copy_current_token();
@@ -716,17 +730,17 @@ impl Parser {
         self.current_token.clone().unwrap()
     }
 
-    fn parse_null_literal(&mut self) -> Result<AstExpression, String> {
+    fn parse_null_literal(&mut self) -> AstExpressionResult {
         self.eat(&TokenKind::Null);
-        return Ok(AstExpression::NullLiteral(self.get_copy_current_token()));
+        return Ok(AstExpression::NullLiteral(NullLiteralNode(self.get_copy_current_token())));
     }
 
-    fn parse_undefined_literal(&mut self) -> Result<AstExpression, String> {
+    fn parse_undefined_literal(&mut self) -> AstExpressionResult {
         self.eat(&TokenKind::Undefined);
-        return Ok(AstExpression::UndefinedLiteral(self.get_copy_current_token()));
+        return Ok(AstExpression::UndefinedLiteral(UndefinedLiteralNode(self.get_copy_current_token())));
     }
 
-    fn parse_string_literal(&mut self) -> Result<AstExpression, String> {
+    fn parse_string_literal(&mut self) -> AstExpressionResult {
         if let Some(TokenKind::String(str)) = self.get_current_token() {
             let value = str.clone();
             let token = self.current_token.clone().unwrap();
@@ -740,7 +754,62 @@ impl Parser {
         ));
     }
 
-    fn parse_number_literal(&mut self) -> Result<AstExpression, String> {
+    fn parse_template_string_literal(&mut self) -> AstExpressionResult {
+        if let Some(TokenKind::TemplateString(str)) = self.get_current_token() {
+            let mut template_elements: Vec<TemplateElement> = vec![];
+
+            let mut chars = str.chars();
+            let mut pos = 0;
+            let mut template_start_position: Option<usize> = None;
+            let mut prev_pos = 0;
+
+            while let Some(char) = chars.next() {
+                pos += 1;
+
+                if char == '$' {
+                    template_elements.push(TemplateElement::Raw(str[prev_pos..pos - 1].to_string()));
+                    prev_pos = pos - 1;
+                    pos += 1;
+
+                    if let Some('{') = chars.next() {
+                        template_start_position = Some(pos);
+                    }
+                }
+
+                if char == '}' {
+                    if let Some(prev_pos) = template_start_position {
+                        let mut parser = Parser::default();
+                        parser.set_new_source(&str[prev_pos..pos - 1]);
+                        let expression = parser.parse_expression()
+                            .expect(format!("Error during template parsing, expression: '{str}'").as_str());
+                        template_elements.push(TemplateElement::Expression(expression));
+                    }
+
+                    template_start_position = None;
+                    prev_pos = pos;
+                }
+            }
+
+            if prev_pos != pos {
+                template_elements.push(TemplateElement::Raw(str[prev_pos..pos].to_string()));
+            }
+
+            let token = self.current_token.clone().unwrap();
+
+            self.next_token();
+
+            return Ok(AstExpression::TemplateStringLiteral(
+                TemplateStringLiteralNode { token, elements: template_elements }
+            ));
+        }
+
+        return Err(format!(
+            "Expected string, but got: {}",
+            self.get_current_token().unwrap().to_keyword()
+        ));
+    }
+
+    fn parse_number_literal(&mut self) -> AstExpressionResult {
         if let Some(TokenKind::Number(number)) = self.get_current_token() {
             let value = number.clone();
             let token = self.current_token.clone().unwrap();
@@ -759,7 +828,7 @@ impl Parser {
         self.current_token = self.scanner.next_token();
     }
 
-    fn parse_if_statement(&mut self) -> Result<AstStatement, String> {
+    fn parse_if_statement(&mut self) -> AstStatementResult {
         self.eat(&TokenKind::IfKeyword);
         self.eat(&TokenKind::OpenParen);
 

@@ -13,11 +13,11 @@ impl Execute for NumberLiteralNode {
     }
 }
 
-impl Into<AstExpression> for NumberLiteralNode {
-    fn into(self) -> AstExpression {
-        AstExpression::NumberLiteral(self)
-    }
-}
+// impl Into<AstExpression> for NumberLiteralNode {
+//     fn into(self) -> AstExpression {
+//         AstExpression::NumberLiteral(self)
+//     }
+// }
 
 impl Into<AstStatement> for NumberLiteralNode {
     fn into(self) -> AstStatement {
