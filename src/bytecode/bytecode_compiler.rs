@@ -304,12 +304,7 @@ impl<'a> Visitor for BytecodeCompiler<'a> {
         self.visit_statement(&stmt.body);
     }
 
-    fn visit_function_argument(&mut self, stmt: &FunctionArgument) {
-        // self.visit_identifier_node(&stmt.name);
-        // if let Some(value) = &stmt.default_value {
-        //     self.visit_expression(value);
-        // }
-    }
+    fn visit_function_argument(&mut self, _: &FunctionArgument) {}
 
     fn visit_block_statement(&mut self, stmt: &BlockStatementNode) {
         self.visit_block(&stmt.statements);
@@ -412,6 +407,21 @@ impl<'a> Visitor for BytecodeCompiler<'a> {
     fn visit_new_expression(&mut self, stmt: &NewExpressionNode) {
         self.visit_expression(&stmt.callee);
         stmt.arguments.iter().for_each(|x| self.visit_expression(x));
+    }
+
+    fn visit_template_string_literal_expression(&mut self, node: &TemplateStringLiteralNode) {
+        node.elements.iter().enumerate().for_each(|(i, x)| {
+            match x {
+                TemplateElement::Raw(raw_str) => {
+                    self.push_literal(JsValue::String(raw_str.clone()));
+                }
+                TemplateElement::Expression(expression) => self.visit_expression(expression)
+            };
+
+            if i != node.elements.len() - 1 {
+                self.emit_opcode(Opcode::Add);
+            }
+        })
     }
 
     fn visit_call_expression(&mut self, stmt: &CallExpressionNode) {

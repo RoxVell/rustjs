@@ -1,7 +1,7 @@
-use std::fmt::{Debug, Formatter};
+use std::fmt::{Debug};
 use crate::interpreter::ast_interpreter::{Interpreter};
-use crate::nodes::{AstExpression, Execute, StringLiteralNode, TextSpan};
-use crate::scanner::{Span, Token, TokenKind};
+use crate::nodes::{AstExpression, Execute};
+use crate::scanner::Token;
 use crate::value::JsValue;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -10,14 +10,10 @@ pub enum TemplateElement {
     Expression(AstExpression),
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct TemplateStringLiteralNode {
     pub elements: Vec<TemplateElement>,
     pub token: Token,
-}
-
-impl TemplateStringLiteralNode {
-
 }
 
 // fn transform_template_string_to_binary_expression(template_node: &TemplateStringLiteralNode) -> AstExpression {
@@ -64,8 +60,8 @@ impl Execute for TemplateStringLiteralNode {
     }
 }
 
-impl Debug for TemplateStringLiteralNode {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "<template_string>")
-    }
-}
+// impl Debug for TemplateStringLiteralNode {
+//     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+//         write!(f, "<template_string>")
+//     }
+// }

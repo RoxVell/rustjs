@@ -1,5 +1,5 @@
-use crate::scanner::{Scanner, Span, Token, TokenKind};
-use ariadne::{Color, ColorGenerator, Label, Report, ReportKind, Source};
+use crate::scanner::{Scanner, Token, TokenKind};
+use ariadne::{Color, Label, Report, ReportKind, Source};
 use crate::nodes::*;
 use crate::nodes::AstExpression::UnaryExpression;
 
@@ -758,6 +758,7 @@ impl Parser {
         if let Some(TokenKind::TemplateString(str)) = self.get_current_token() {
             let mut template_elements: Vec<TemplateElement> = vec![];
 
+            let start_template_pos = self.scanner.get_current_pos() - str.len() - 1;
             let mut chars = str.chars();
             let mut pos = 0;
             let mut template_start_position: Option<usize> = None;
@@ -767,7 +768,10 @@ impl Parser {
                 pos += 1;
 
                 if char == '$' {
-                    template_elements.push(TemplateElement::Raw(str[prev_pos..pos - 1].to_string()));
+                    if prev_pos != pos - 1 {
+                        template_elements.push(TemplateElement::Raw(str[prev_pos..pos - 1].to_string()));
+                    }
+
                     prev_pos = pos - 1;
                     pos += 1;
 
@@ -779,7 +783,10 @@ impl Parser {
                 if char == '}' {
                     if let Some(prev_pos) = template_start_position {
                         let mut parser = Parser::default();
-                        parser.set_new_source(&str[prev_pos..pos - 1]);
+                        // Trick to get correct token spans
+                        let mut string_with_whitespaces = " ".repeat(start_template_pos + prev_pos);
+                        string_with_whitespaces.push_str(&str[prev_pos..pos - 1]);
+                        parser.set_new_source(&string_with_whitespaces);
                         let expression = parser.parse_expression()
                             .expect(format!("Error during template parsing, expression: '{str}'").as_str());
                         template_elements.push(TemplateElement::Expression(expression));

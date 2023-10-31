@@ -1,4 +1,4 @@
-use ariadne::{Color, Config, Fmt, Label, Report, ReportKind, Source};
+use ariadne::{Color, Fmt, Label, Report, ReportKind, Source};
 use crate::diagnostic::PrintDiagnostic;
 use crate::keywords::{BREAK_KEYWORD, THIS_KEYWORD};
 use crate::scanner::TextSpan;

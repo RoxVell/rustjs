@@ -1,4 +1,4 @@
-use crate::nodes::{AstExpression, Execute, Interpreter, JsValue, Token};
+use crate::nodes::{AstExpression, Execute, Interpreter, JsValue};
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum UnaryOperator {

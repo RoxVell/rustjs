@@ -1,5 +1,5 @@
 use crate::interpreter::ast_interpreter::{Interpreter};
-use crate::nodes::{AstExpression, Execute};
+use crate::nodes::{Execute};
 use crate::nodes::function_signature::FunctionSignature;
 use crate::nodes::identifier::IdentifierNode;
 use crate::value::function::JsFunction;

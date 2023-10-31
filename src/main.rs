@@ -149,14 +149,14 @@ fn main() {
     match &cli.command {
         Some(command) => match command {
             CliCommand::PrintBytecode(options) => {
-                let ast = process_default_args(options);
+                let ast = process_default_args(options, &globals);
                 process_bytecode_compilation(&globals, &ast, options.time);
             }
             CliCommand::VM(options) => {
                 process_bytecode_evaluation(options, &globals);
             }
             CliCommand::Ast(options) => {
-                let ast = process_default_args(options);
+                let ast = process_default_args(options, &globals);
                 let environment = Environment::with_globals(globals);
                 let ast_interpreter = Interpreter::with_environment(environment);
                 let result = ast_interpreter.interpret(&ast).expect("Error during evaluating node");
@@ -170,7 +170,7 @@ fn main() {
 }
 
 fn process_bytecode_evaluation(options: &DefaultArgs, globals: &[GlobalVariable]) {
-    let ast = process_default_args(options);
+    let ast = process_default_args(options, globals);
     let code_block = process_bytecode_compilation(&globals, &ast, options.time);
     let mut interpreter = VM::new(&globals);
 
@@ -214,7 +214,7 @@ fn process_parsing(code: &str, measure_time: bool) -> (AstStatement, Option<Dura
     }
 }
 
-fn process_default_args(options: &DefaultArgs) -> AstStatement {
+fn process_default_args(options: &DefaultArgs, globals: &[GlobalVariable]) -> AstStatement {
     let code = fs::read_to_string(&options.filename)
         .expect("Should have been able to read the file");
 
@@ -239,7 +239,8 @@ fn process_default_args(options: &DefaultArgs) -> AstStatement {
 
     if !options.ignore_errors || !options.ignore_warnings {
         let diagnostic_bag_ref = Rc::new(RefCell::new(DiagnosticBag::new()));
-        let mut symbol_checker = SymbolChecker::new(&code, Rc::clone(&diagnostic_bag_ref));
+        let global_names = globals.iter().map(|x| x.name.clone()).collect();
+        let mut symbol_checker = SymbolChecker::new(&code, Rc::clone(&diagnostic_bag_ref), global_names);
         symbol_checker.check_symbols(&ast);
 
         if !options.ignore_warnings {

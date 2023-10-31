@@ -1,10 +1,8 @@
-use std::cell::{Ref, RefCell};
+use std::cell::{RefCell};
 use std::rc::Rc;
 use std::collections::HashMap;
-use std::env::var;
 use crate::diagnostic::{Diagnostic, DiagnosticBagRef, DiagnosticKind};
 use crate::nodes::*;
-// use crate::node::{AssignmentExpressionNode, AstExpression, AstStatement, BlockStatementNode, ClassDeclarationNode, ForStatementNode, FunctionDeclarationNode, GetSpan, IdentifierNode, VariableDeclarationKind, VariableDeclarationNode, WhileStatementNode};
 use crate::scanner::{TextSpan, Token};
 use crate::symbol_checker::diagnostics::{ConstantAssigningDiagnostic, ManualImplOfAssignOperationDiagnostic, MultipleAssignmentDiagnostic, UnusedVariableDiagnostic, VariableNotDefinedDiagnostic, WrongBreakContextDiagnostic, WrongThisContextDiagnostic};
 use crate::visitor::Visitor;
@@ -19,9 +17,11 @@ pub struct SymbolChecker<'a> {
 }
 
 impl<'a> SymbolChecker<'a> {
-    pub fn new(source: &'a str, diagnostic_bag: DiagnosticBagRef<'a>) -> Self {
+    pub fn new(source: &'a str, diagnostic_bag: DiagnosticBagRef<'a>, globals: Vec<String>) -> Self {
+        let global_environment = LightEnvironment::with_symbols(globals);
+
         Self {
-            environment: RefCell::new(Rc::new(RefCell::new(LightEnvironment::default()))),
+            environment: RefCell::new(LightEnvironment::new(global_environment.into()).into()),
             source,
             diagnostic_bag,
             is_inside_this_context: false,
@@ -132,6 +132,12 @@ struct LightEnvironment {
     usages: HashMap<String, Vec<TextSpan>>,
 }
 
+impl Into<LightEnvironmentRef> for LightEnvironment {
+    fn into(self) -> LightEnvironmentRef {
+        Rc::new(RefCell::new(self))
+    }
+}
+
 type LightEnvironmentRef = Rc<RefCell<LightEnvironment>>;
 
 #[derive(Debug)]
@@ -145,6 +151,15 @@ impl LightEnvironment {
         Self {
             parent: Some(parent),
             symbols: HashMap::new(),
+            usages: HashMap::new(),
+        }
+    }
+
+    fn with_symbols(symbol_names: Vec<String>) -> Self {
+        let symbols = symbol_names.into_iter().map(|x| (x, Symbol { span: TextSpan::default(), is_const: true }));
+        Self {
+            parent: None,
+            symbols: HashMap::from_iter(symbols),
             usages: HashMap::new(),
         }
     }
@@ -170,18 +185,6 @@ impl LightEnvironment {
 
         if let Some(parent) = &self.parent {
             return parent.borrow_mut().add_usage(symbol_name, span);
-        }
-
-        return false;
-    }
-
-    fn is_symbol_exists(&self, symbol_name: &str) -> bool {
-        if self.symbols.contains_key(symbol_name) {
-            return true;
-        }
-
-        if let Some(parent) = &self.parent {
-            return parent.borrow_mut().is_symbol_exists(symbol_name);
         }
 
         return false;
@@ -239,6 +242,18 @@ impl<'a> Visitor for SymbolChecker<'a> {
         self.set_environment(self.create_new_environment());
         stmt.statements.iter().for_each(|x| self.visit_statement(x));
         self.pop_environment();
+    }
+
+    fn visit_template_string_literal_expression(&mut self, node: &TemplateStringLiteralNode) {
+        node.elements.iter().for_each(|x| {
+            if let TemplateElement::Expression(expression) = x {
+                self.visit_expression(expression)
+            }
+            // match x {
+            //     TemplateElement::Raw(_) => {}
+            //     TemplateElement::Expression(expression) => self.visit_expression(expression)
+            // }
+        });
     }
 
     fn visit_assignment_expression(&mut self, stmt: &AssignmentExpressionNode) {

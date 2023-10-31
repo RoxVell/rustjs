@@ -104,7 +104,7 @@ impl<'a> VM<'a> {
                                     self.call_stack.push(new_call_frame);
                                     return self.run();
                                 },
-                                JsFunction::Ordinary(_) | JsFunction::Native(_) => unreachable!(),
+                                JsFunction::Ordinary(_) => unreachable!(),
                             }
                         }
                     }

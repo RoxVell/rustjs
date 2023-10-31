@@ -184,7 +184,7 @@ impl Display for TokenKind {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Default, Clone, Debug, PartialEq)]
 pub struct TextSpan {
     pub start: Span,
     pub end: Span,
@@ -217,7 +217,7 @@ impl Debug for Token {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Default, Debug, Copy, Clone, PartialEq)]
 pub struct Span {
     pub line: usize,
     pub row: usize,
@@ -241,6 +241,10 @@ impl Scanner {
             current_line: 0,
             source_code,
         }
+    }
+
+    pub fn get_current_pos(&self) -> usize {
+        self.current_pos
     }
 
     fn consume(&self, token: TokenKind) -> Token {
@@ -600,30 +604,7 @@ impl Scanner {
     }
 
     fn parse_template_string_literal(&mut self, quote_char: char) -> Option<TokenKind> {
-        // let mut cursor = self.current_pos;
-        // let mut chars = self.source_code[cursor..].chars();
-        //
-        // while let Some(char) = chars.next() {
-        //     cursor += 1;
-        //
-        //     if char == '$' {
-        //         cursor += 1;
-        //
-        //         if let Some('{') = chars.next() {
-        //             self.current_pos = cursor;
-        //             let token = self.next_token();
-        //             println!("token {token:?}");
-        //         }
-        //     }
-        //
-        //     if char == '`' {
-        //         break;
-        //     }
-        // }
-        //
-        // todo!()
-
-        Some(TokenKind::TemplateString((self.parse_until_char(quote_char).to_string())))
+        Some(TokenKind::TemplateString(self.parse_until_char(quote_char).to_string()))
     }
 
     fn parse_string_literal(&mut self, quote_char: char) -> Option<TokenKind> {
