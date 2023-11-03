@@ -1,4 +1,3 @@
-// mod interpreter;
 mod node;
 mod parser;
 mod scanner;
@@ -11,10 +10,11 @@ mod nodes;
 mod bytecode;
 mod interpreter;
 mod cli;
+mod source;
 
 use nodes::*;
 use std::cell::RefCell;
-use std::fs;
+use std::path::PathBuf;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 use ariadne::{Color, Fmt};
@@ -22,9 +22,10 @@ use clap::Parser;
 use diagnostic::DiagnosticBag;
 use crate::bytecode::bytecode_compiler::{BytecodeCompiler, CodeBlock, GlobalVariable};
 use crate::bytecode::bytecode_interpreter::VM;
-use crate::bytecode::bytecode_printer::{BytecodePrinter};
+use crate::bytecode::bytecode_printer::BytecodePrinter;
 use crate::cli::{Cli, CliCommand, DefaultArgs};
 use crate::interpreter::environment::Environment;
+use crate::source::{FileSource, InlineSource, Source};
 use crate::symbol_checker::symbol_checker::SymbolChecker;
 
 fn get_globals() -> Vec<GlobalVariable> {
@@ -143,7 +144,6 @@ fn get_globals() -> Vec<GlobalVariable> {
 
 fn main() {
     let cli = Cli::parse();
-
     let globals = get_globals();
 
     match &cli.command {
@@ -174,7 +174,8 @@ fn process_bytecode_evaluation(options: &DefaultArgs, globals: &[GlobalVariable]
     let code_block = process_bytecode_compilation(&globals, &ast, options.time);
     let mut interpreter = VM::new(&globals);
 
-    println!("\n------- EVAL BEGIN --------");
+    println!("------- EVAL BEGIN --------");
+
     let mut evaluation_time_start: Option<Instant> = None;
 
     if options.time {
@@ -185,7 +186,6 @@ fn process_bytecode_evaluation(options: &DefaultArgs, globals: &[GlobalVariable]
         let evaluation_time_end = evaluation_time_start.unwrap().elapsed();
         println!("VM evaluation is done in {}ms", evaluation_time_end.as_millis());
     }
-
     println!("-------- EVAL END ---------\n");
     println!("result stack:");
     println!("{:?}", interpreter.dump_stack());
@@ -197,14 +197,14 @@ fn process_bytecode_evaluation(options: &DefaultArgs, globals: &[GlobalVariable]
     }
 }
 
-fn process_parsing(code: &str, measure_time: bool) -> (AstStatement, Option<Duration>) {
+fn process_parsing<'a>(source: Source, measure_time: bool) -> (AstStatement, Option<Duration>) {
     let mut parsing_time_start: Option<Instant> = None;
 
     if measure_time {
         parsing_time_start = Some(Instant::now());
     }
 
-    let ast = parser::Parser::parse_code_to_ast(&code)
+    let ast = parser::Parser::parse_code_to(source)
         .expect(format!("Error occurred during parsing").as_str());
 
     if measure_time {
@@ -215,19 +215,21 @@ fn process_parsing(code: &str, measure_time: bool) -> (AstStatement, Option<Dura
 }
 
 fn process_default_args(options: &DefaultArgs, globals: &[GlobalVariable]) -> AstStatement {
-    let code = fs::read_to_string(&options.filename)
-        .expect("Should have been able to read the file");
+    let mut path = PathBuf::new();
+    path.push(&options.filename);
+    let source = Source::File(FileSource::new(path));
 
     if options.debug {
         println!("-----DEBUG (printing tokens)-----");
-        let mut scanner = scanner::Scanner::new(code.to_string());
+        let mut scanner = scanner::Scanner::new(source.code().to_string());
 
         while let Some(token) = scanner.next_token() {
             println!("{:?}", token);
         }
     }
 
-    let (ast, duration) = process_parsing(&code, options.time);
+    // TODO: avoid cloning
+    let (ast, duration) = process_parsing(source.clone(), options.time);
 
     if options.time {
         println!("Parsing is done in {}ms", duration.unwrap().as_millis());
@@ -240,7 +242,7 @@ fn process_default_args(options: &DefaultArgs, globals: &[GlobalVariable]) -> As
     if !options.ignore_errors || !options.ignore_warnings {
         let diagnostic_bag_ref = Rc::new(RefCell::new(DiagnosticBag::new()));
         let global_names = globals.iter().map(|x| x.name.clone()).collect();
-        let mut symbol_checker = SymbolChecker::new(&code, Rc::clone(&diagnostic_bag_ref), global_names);
+        let mut symbol_checker = SymbolChecker::new(&source, Rc::clone(&diagnostic_bag_ref), global_names);
         symbol_checker.check_symbols(&ast);
 
         if !options.ignore_warnings {
@@ -315,9 +317,11 @@ fn repl() {
     loop {
         print!("> ");
         std::io::Write::flush(&mut std::io::stdout()).expect("flush failed!");
-        std::io::stdin().read_line(&mut line).unwrap();
+
+        let mut inline_source = InlineSource::default();
+        std::io::stdin().read_line(&mut inline_source.code).unwrap();
         let ast = parser
-            .parse(&line)
+            .parse(Source::Inline(inline_source))
             .expect(format!("Error occured during parsing").as_str());
         line.clear();
 
@@ -325,5 +329,6 @@ fn repl() {
             Ok(result) => println!("{}", result),
             Err(e) => println!("\x1b[31mError during evaluating node: {e}\x1b[0m"),
         }
+
     }
 }

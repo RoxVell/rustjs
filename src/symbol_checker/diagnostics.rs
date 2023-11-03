@@ -1,7 +1,8 @@
-use ariadne::{Color, Fmt, Label, Report, ReportKind, Source};
+use ariadne::{Color, Fmt, Label, Report, ReportKind};
 use crate::diagnostic::PrintDiagnostic;
 use crate::keywords::{BREAK_KEYWORD, THIS_KEYWORD};
 use crate::scanner::TextSpan;
+use crate::Source;
 
 #[derive(Debug)]
 pub struct ConstantAssigningDiagnostic {
@@ -11,8 +12,8 @@ pub struct ConstantAssigningDiagnostic {
 }
 
 impl PrintDiagnostic for ConstantAssigningDiagnostic {
-    fn print_diagnostic(&self, source: &str) {
-        let filename = "a.js";
+    fn print_diagnostic(&self, source: &Source) {
+        let filename = source.filename();
 
         Report::build(ReportKind::Error, filename, self.declaration_span.start.row)
             .with_message("assignment to constant variable.")
@@ -26,7 +27,7 @@ impl PrintDiagnostic for ConstantAssigningDiagnostic {
             ])
             .with_note(format!("consider making this binding mutable: `let {}`", self.variable_name))
             .finish()
-            .print((filename, Source::from(source)))
+            .print((filename, ariadne::Source::from(source.code())))
             .unwrap();
     }
 }
@@ -38,10 +39,9 @@ pub struct UnusedVariableDiagnostic {
 }
 
 impl PrintDiagnostic for UnusedVariableDiagnostic {
-    fn print_diagnostic(&self, source: &str) {
+    fn print_diagnostic(&self, source: &Source) {
         let warning_message = format!("variable '{}' is never used", self.variable_name);
-        // TODO: add filename
-        report_symbol_diagnostic(ReportKind::Warning, warning_message.as_str(), &self.id_span, "a.js", source);
+        report_symbol_diagnostic(ReportKind::Warning, warning_message.as_str(), &self.id_span, source);
     }
 }
 
@@ -52,10 +52,9 @@ pub struct VariableNotDefinedDiagnostic {
 }
 
 impl PrintDiagnostic for VariableNotDefinedDiagnostic {
-    fn print_diagnostic(&self, source: &str) {
+    fn print_diagnostic(&self, source: &Source) {
         let warning_message = format!("variable '{}' is not defined", self.variable_name);
-        // TODO: add filename
-        report_symbol_diagnostic(ReportKind::Error, warning_message.as_str(), &self.id_span, "a.js", source);
+        report_symbol_diagnostic(ReportKind::Error, warning_message.as_str(), &self.id_span, source);
     }
 }
 
@@ -66,10 +65,9 @@ pub struct MultipleAssignmentDiagnostic {
 }
 
 impl PrintDiagnostic for MultipleAssignmentDiagnostic {
-    fn print_diagnostic(&self, source: &str) {
+    fn print_diagnostic(&self, source: &Source) {
         let warning_message = format!("identifier '{}' has already been declared", self.symbol_name);
-        // TODO: add filename
-        report_symbol_diagnostic(ReportKind::Error, warning_message.as_str(), &self.id_span, "a.js", source);
+        report_symbol_diagnostic(ReportKind::Error, warning_message.as_str(), &self.id_span, source);
     }
 }
 
@@ -79,16 +77,13 @@ pub struct WrongThisContextDiagnostic {
 }
 
 impl PrintDiagnostic for WrongThisContextDiagnostic {
-    fn print_diagnostic(&self, source: &str) {
+    fn print_diagnostic(&self, source: &Source) {
         let span = &self.span;
-        // TODO: add filename
-        let filename = "a.js";
 
         report_wrong_keyword_context(
             THIS_KEYWORD,
             "keyword 'this' must be used in functions or class methods",
             span,
-            filename,
             source,
         );
     }
@@ -100,16 +95,13 @@ pub struct WrongBreakContextDiagnostic {
 }
 
 impl PrintDiagnostic for WrongBreakContextDiagnostic {
-    fn print_diagnostic(&self, source: &str) {
+    fn print_diagnostic(&self, source: &Source) {
         let span = &self.span;
-        // TODO: add filename
-        let filename = "a.js";
 
         report_wrong_keyword_context(
             BREAK_KEYWORD,
             "keyword 'break' can be used only inside while / for loops",
             span,
-            filename,
             source,
         );
     }
@@ -122,23 +114,21 @@ pub struct ManualImplOfAssignOperationDiagnostic {
 
 impl PrintDiagnostic for ManualImplOfAssignOperationDiagnostic {
     // TODO: add advice for shorten assignment
-    fn print_diagnostic(&self, source: &str) {
+    fn print_diagnostic(&self, source: &Source) {
         let span = &self.span;
-        // TODO: add filename
-        let filename = "a.js";
 
         report_symbol_diagnostic(
             ReportKind::Warning,
             "manual implementation of assign operation",
             span,
-            filename,
             source,
         );
     }
 }
 
-fn report_wrong_keyword_context(keyword: &str, note: &str, span: &TextSpan, filename: &str, source: &str) {
+fn report_wrong_keyword_context(keyword: &str, note: &str, span: &TextSpan, source: &Source) {
     let message = format!("keyword '{keyword}' is used inside invalid context");
+    let filename = source.filename();
 
     Report::build(ReportKind::Error, filename, span.start.row)
         .with_message(message)
@@ -148,15 +138,17 @@ fn report_wrong_keyword_context(keyword: &str, note: &str, span: &TextSpan, file
         )
         .with_note(note)
         .finish()
-        .print((filename, Source::from(source)))
+        .print((filename, ariadne::Source::from(source.code())))
         .unwrap();
 }
 
-fn report_symbol_diagnostic(report_kind: ReportKind, message: &str, span: &TextSpan, filename: &str, source: &str) {
+fn report_symbol_diagnostic(report_kind: ReportKind, message: &str, span: &TextSpan, source: &Source) {
     let color = match report_kind {
         ReportKind::Error => Color::Red,
         _ => Color::Yellow
     };
+
+    let filename = source.filename();
 
     Report::build(report_kind, filename, span.start.row)
         .with_message(message)
@@ -165,6 +157,6 @@ fn report_symbol_diagnostic(report_kind: ReportKind, message: &str, span: &TextS
                 .with_color(color),
         )
         .finish()
-        .print((filename, Source::from(source)))
+        .print((filename, ariadne::Source::from(source.code())))
         .unwrap();
 }

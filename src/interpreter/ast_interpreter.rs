@@ -2,6 +2,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use crate::interpreter::environment::{Environment, EnvironmentRef};
 use crate::nodes::{AstExpression, AstStatement, Execute, FunctionArgument};
+use crate::{Source};
 use crate::value::function::{AstCallable, JsFunction, JsFunctionArg, NativeCallable};
 use crate::value::JsValue;
 use crate::value::object::{JsObject, ObjectKind};
@@ -300,464 +301,466 @@ fn get_global_environment() -> Environment {
     ])
 }
 
-// impl Default for Interpreter {
-//     fn default() -> Self {
-//         let environment = get_global_environment();
-//         Self {
-//             environment: RefCell::new(Rc::new(RefCell::new(environment))),
-//         }
-//     }
-// }
-
-pub fn eval_code(code: &str) -> JsValue {
-    let interpreter = Interpreter::new();
-
-    let ast = crate::parser::Parser::parse_code_to_ast(code)
-        .expect(format!("Error occurred during parsing").as_str());
-
-    interpreter.interpret(&ast).unwrap()
-}
-
 fn interpret(interpreter: &mut Interpreter, code: &str) -> JsValue {
-    let ast = crate::parser::Parser::parse_code_to_ast(code)
+    let source = Source::inline_source(code.to_string());
+
+    let ast = crate::parser::Parser::parse_code_to(source)
         .expect(format!("Error occurred during parsing").as_str());
 
     interpreter.interpret(&ast).unwrap()
 }
 
-#[test]
-fn get_variable_value_from_parent_environment() {
-    let variable_name = "abc";
-    let variable_value = JsValue::Number(123.0);
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-    let mut parent_env = Environment::default();
-    parent_env.define_variable(variable_name.to_string(), variable_value.clone(), false).unwrap();
+    pub fn eval_code(code: &str) -> JsValue {
+        let source = Source::inline_source(code.to_string());
+        let interpreter = Interpreter::new();
 
-    let child_env = Environment::new(Rc::new(RefCell::new(parent_env)));
-    let value_from_parent_env = child_env.get_variable_value(variable_name);
+        let ast = crate::parser::Parser::parse_code_to(source)
+            .expect(format!("Error occurred during parsing").as_str());
 
-    assert_eq!(value_from_parent_env, variable_value);
-}
-
-#[test]
-fn try_to_get_undefined_variable_from_environment() {
-    let env = Environment::default();
-    assert_eq!(env.get_variable_value("abc"), JsValue::Undefined);
-}
-
-#[test]
-fn add_operator_works() {
-    let code = "2 + 2;";
-    assert_eq!(eval_code(code), JsValue::Number(4.0));
-
-    let code = "'Hello ' + 'world!';";
-    assert_eq!(eval_code(code), JsValue::String("Hello world!".to_string()));
-}
-
-#[test]
-fn if_operator_works_then_branch() {
-    let code = "let a; if (true) { a = 5; } else { a = 10; } a;";
-    assert_eq!(eval_code(code), JsValue::Number(5.0));
-}
-
-#[test]
-fn if_operator_works_else_branch() {
-    let code = "let a; if (false) { a = 5; } else { a = 10; } a;";
-    assert_eq!(eval_code(code), JsValue::Number(10.0));
-}
-
-#[test]
-fn for_loop_works() {
-    let code = "
-    let a = 5;
-
-    for (let i = 1; i < 11; i+=1) {
-      a *= i;
+        interpreter.interpret(&ast).unwrap()
     }
 
-    a;";
+    #[test]
+    fn get_variable_value_from_parent_environment() {
+        let variable_name = "abc";
+        let variable_value = JsValue::Number(123.0);
 
-    assert_eq!(eval_code(code), JsValue::Number(18144000.0));
-}
+        let mut parent_env = Environment::default();
+        parent_env.define_variable(variable_name.to_string(), variable_value.clone(), false).unwrap();
 
-#[test]
-fn while_loop_works() {
-    let code = "
-    let a = 0;
-    let i = 10;
+        let child_env = Environment::new(Rc::new(RefCell::new(parent_env)));
+        let value_from_parent_env = child_env.get_variable_value(variable_name);
 
-    while (i > 0) {
-        a += i;
-        i -=1 ;
+        assert_eq!(value_from_parent_env, variable_value);
     }
 
-    a;";
+    #[test]
+    fn try_to_get_undefined_variable_from_environment() {
+        let env = Environment::default();
+        assert_eq!(env.get_variable_value("abc"), JsValue::Undefined);
+    }
 
-    assert_eq!(eval_code(code), JsValue::Number(55.0));
-}
+    #[test]
+    fn add_operator_works() {
+        let code = "2 + 2;";
+        assert_eq!(eval_code(code), JsValue::Number(4.0));
 
-#[test]
-fn equality_expression_equal_works() {
-    let code = "5 == 5";
-    assert_eq!(eval_code(code), JsValue::Boolean(true));
-}
+        let code = "'Hello ' + 'world!';";
+        assert_eq!(eval_code(code), JsValue::String("Hello world!".to_string()));
+    }
 
-#[test]
-fn equality_expression_not_equal_works() {
-    let code = "5 == 6";
-    assert_eq!(eval_code(code), JsValue::Boolean(false));
-}
+    #[test]
+    fn if_operator_works_then_branch() {
+        let code = "let a; if (true) { a = 5; } else { a = 10; } a;";
+        assert_eq!(eval_code(code), JsValue::Number(5.0));
+    }
 
-#[test]
-fn inequality_expression_equal_works() {
-    let code = "5 != 5";
-    assert_eq!(eval_code(code), JsValue::Boolean(false));
-}
+    #[test]
+    fn if_operator_works_else_branch() {
+        let code = "let a; if (false) { a = 5; } else { a = 10; } a;";
+        assert_eq!(eval_code(code), JsValue::Number(10.0));
+    }
 
-#[test]
-fn inequality_expression_not_equal_works() {
-    let code = "5 != 6";
-    assert_eq!(eval_code(code), JsValue::Boolean(true));
-}
+    #[test]
+    fn for_loop_works() {
+        let code = "
+            let a = 5;
 
-#[test]
-fn conditional_expression_equal_works() {
-    let code = "true ? 1 : 2;";
-    assert_eq!(eval_code(code), JsValue::Number(1.0));
-}
-
-#[test]
-fn conditional_expression_not_equal_works() {
-    let code = "false ? 1 : 2;";
-    assert_eq!(eval_code(code), JsValue::Number(2.0));
-}
-
-#[test]
-fn object_expression_works() {
-    let code = "
-        let a = {
-            5: 2 + 3,
-            'qwe-123': 'string prop',
-            abc: 'identifier prop',
-            ['hello ' + 123]: 'hello 123',
-        };
-
-        a;
-    ";
-
-    let mut interpreter = Interpreter::new();
-
-    let expected = JsValue::object([
-        ("5".to_string(), JsValue::Number(5.0)),
-        (
-            "qwe-123".to_string(),
-            JsValue::String("string prop".to_string()),
-        ),
-        (
-            "abc".to_string(),
-            JsValue::String("identifier prop".to_string()),
-        ),
-        (
-            "hello 123".to_string(),
-            JsValue::String("hello 123".to_string()),
-        ),
-    ]);
-
-    assert_eq!(interpret(&mut interpreter, code), expected);
-    assert_eq!(interpret(&mut interpreter, "a[5];"), JsValue::Number(5.0));
-    assert_eq!(
-        interpret(&mut interpreter, "a['qwe-123'];"),
-        JsValue::String("string prop".to_string())
-    );
-    assert_eq!(
-        interpret(&mut interpreter, "a['abc'];"),
-        JsValue::String("identifier prop".to_string())
-    );
-    assert_eq!(
-        interpret(&mut interpreter, "a.abc;"),
-        JsValue::String("identifier prop".to_string())
-    );
-    assert_eq!(
-        interpret(&mut interpreter, "a['hello ' + 123];"),
-        JsValue::String("hello 123".to_string())
-    );
-}
-
-#[test]
-fn object_function_property() {
-    let code = "
-        let a = {
-            b: function(a,b) {
-                return a * 2 + b;
+            for (let i = 1; i < 11; i+=1) {
+              a *= i;
             }
-        };
 
-        a.b(3, 2);
-    ";
-    assert_eq!(eval_code(code), JsValue::Number(8.0));
-}
+            a;
+        ";
 
-#[test]
-fn nested_member_expression_works() {
-    let code = "
-    let a = {
-        b: {
-            c: {
-                d: 'qwerty'
+        assert_eq!(eval_code(code), JsValue::Number(18144000.0));
+    }
+
+    #[test]
+    fn while_loop_works() {
+        let code = "
+            let a = 0;
+            let i = 10;
+
+            while (i > 0) {
+                a += i;
+                i -=1 ;
             }
-        }
-    };
-    a.b.c.d;";
-    assert_eq!(eval_code(code), JsValue::String("qwerty".to_string()));
-}
 
-#[test]
-fn assign_to_object_property_works() {
-    let code = "
-        let a = { b: 10 };
-        a.b = 20;
-        a.b;
-    ";
-    assert_eq!(eval_code(code), JsValue::Number(20.0));
-}
+            a;
+        ";
 
-#[test]
-fn mutate_object_as_reference_works() {
-    let code = "
-        let a = { b: 10 };
-        let c = { d: a };
-        a.b = 25;
-        c.d.b;
-    ";
-    assert_eq!(eval_code(code), JsValue::Number(25.0));
-}
+        assert_eq!(eval_code(code), JsValue::Number(55.0));
+    }
 
-#[test]
-fn object_method_this_expression() {
-    let mut interpreter = Interpreter::new();
+    #[test]
+    fn equality_expression_equal_works() {
+        let code = "5 == 5";
+        assert_eq!(eval_code(code), JsValue::Boolean(true));
+    }
 
-    let code = "
-        let a = {
-          abc: 10,
-          getAbc: function(a, b) {
-            return this.abc;
-          },
-          setAbc: function(newValue) {
-            this.abc = newValue;
-          }
-        };
+    #[test]
+    fn equality_expression_not_equal_works() {
+        let code = "5 == 6";
+        assert_eq!(eval_code(code), JsValue::Boolean(false));
+    }
 
-        a.getAbc();
-    ";
-    assert_eq!(interpret(&mut interpreter, code), JsValue::Number(10.0));
-    assert_eq!(
-        interpret(&mut interpreter, "a.setAbc(25); a.getAbc();"),
-        JsValue::Number(25.0)
-    );
-}
+    #[test]
+    fn inequality_expression_equal_works() {
+        let code = "5 != 5";
+        assert_eq!(eval_code(code), JsValue::Boolean(false));
+    }
 
-#[test]
-fn comparison() {
-    let mut interpreter = Interpreter::new();
+    #[test]
+    fn inequality_expression_not_equal_works() {
+        let code = "5 != 6";
+        assert_eq!(eval_code(code), JsValue::Boolean(true));
+    }
 
-    assert_eq!(interpret(&mut interpreter, "'abc' == 'abc'"), JsValue::Boolean(true));
-    assert_eq!(interpret(&mut interpreter, "'abc' == 'qwe'"), JsValue::Boolean(false));
-    assert_eq!(interpret(&mut interpreter, "123 == 123"), JsValue::Boolean(true));
-    assert_eq!(interpret(&mut interpreter, "123 == 456"), JsValue::Boolean(false));
-    assert_eq!(interpret(&mut interpreter, "true == true"), JsValue::Boolean(true));
-    assert_eq!(interpret(&mut interpreter, "true == false"), JsValue::Boolean(false));
-    assert_eq!(interpret(&mut interpreter, "false == false"), JsValue::Boolean(true));
-    assert_eq!(eval_code("let a = {}; let b = {}; a == b;"), JsValue::Boolean(false));
-    assert_eq!(eval_code("let a = {}; let b = a; a == b;"), JsValue::Boolean(true));
-}
+    #[test]
+    fn conditional_expression_equal_works() {
+        let code = "true ? 1 : 2;";
+        assert_eq!(eval_code(code), JsValue::Number(1.0));
+    }
 
-#[test]
-fn prototype_property_access() {
-    let mut interpreter = Interpreter::new();
+    #[test]
+    fn conditional_expression_not_equal_works() {
+        let code = "false ? 1 : 2;";
+        assert_eq!(eval_code(code), JsValue::Number(2.0));
+    }
 
-    let code = "
-        let prototype = {
-          a: 10
-        };
+    #[test]
+    fn object_expression_works() {
+        let code = "
+            let a = {
+                5: 2 + 3,
+                'qwe-123': 'string prop',
+                abc: 'identifier prop',
+                ['hello ' + 123]: 'hello 123',
+            };
 
-        let target = { b: 30 };
-        setPrototypeOf(target, prototype);
-        target.a;
-    ";
-    assert_eq!(interpret(&mut interpreter, code), JsValue::Number(10.0));
-}
+            a;
+        ";
 
-#[test]
-fn prototype_mutable_property_access() {
-    let mut interpreter = Interpreter::new();
+        let mut interpreter = Interpreter::new();
 
-    let code = "
-        let prototype = {
-          a: 10
-        };
+        let expected = JsValue::object([
+            ("5".to_string(), JsValue::Number(5.0)),
+            (
+                "qwe-123".to_string(),
+                JsValue::String("string prop".to_string()),
+            ),
+            (
+                "abc".to_string(),
+                JsValue::String("identifier prop".to_string()),
+            ),
+            (
+                "hello 123".to_string(),
+                JsValue::String("hello 123".to_string()),
+            ),
+        ]);
 
-        let target = { b: 30 };
-        setPrototypeOf(target, prototype);
-        prototype.a = 50;
-        target.a;
-    ";
-    assert_eq!(interpret(&mut interpreter, code), JsValue::Number(50.0));
-}
+        assert_eq!(interpret(&mut interpreter, code), expected);
+        assert_eq!(interpret(&mut interpreter, "a[5];"), JsValue::Number(5.0));
+        assert_eq!(
+            interpret(&mut interpreter, "a['qwe-123'];"),
+            JsValue::String("string prop".to_string())
+        );
+        assert_eq!(
+            interpret(&mut interpreter, "a['abc'];"),
+            JsValue::String("identifier prop".to_string())
+        );
+        assert_eq!(
+            interpret(&mut interpreter, "a.abc;"),
+            JsValue::String("identifier prop".to_string())
+        );
+        assert_eq!(
+            interpret(&mut interpreter, "a['hello ' + 123];"),
+            JsValue::String("hello 123".to_string())
+        );
+    }
 
-#[test]
-fn two_objects_must_be_checked_for_equality_by_reference() {
-    let code = "
-       let a = { b: { c: 10 } };
+    #[test]
+    fn object_function_property() {
+        let code = "
+            let a = {
+                b: function(a,b) {
+                    return a * 2 + b;
+                }
+            };
 
-       let d = {
-         e: {
-           f: a
-         }
-       };
+            a.b(3, 2);
+        ";
+        assert_eq!(eval_code(code), JsValue::Number(8.0));
+    }
 
-       d.e.f == a;
-    ";
-    assert_eq!(eval_code(code), JsValue::Boolean(true));
+    #[test]
+    fn nested_member_expression_works() {
+        let code = "
+            let a = {
+                b: {
+                    c: {
+                        d: 'qwerty'
+                    }
+                }
+            };
+            a.b.c.d;
+        ";
+        assert_eq!(eval_code(code), JsValue::String("qwerty".to_string()));
+    }
 
-    let code = "
-       let a = { b: { c: 10 } };
+    #[test]
+    fn assign_to_object_property_works() {
+        let code = "
+            let a = { b: 10 };
+            a.b = 20;
+            a.b;
+        ";
+        assert_eq!(eval_code(code), JsValue::Number(20.0));
+    }
 
-       let d = {
-         e: {
-           f: {}
-         }
-       };
+    #[test]
+    fn mutate_object_as_reference_works() {
+        let code = "
+            let a = { b: 10 };
+            let c = { d: a };
+            a.b = 25;
+            c.d.b;
+        ";
+        assert_eq!(eval_code(code), JsValue::Number(25.0));
+    }
 
-       d.e.f == a;
-    ";
-    assert_eq!(eval_code(code), JsValue::Boolean(false));
-}
+    #[test]
+    fn object_method_this_expression() {
+        let mut interpreter = Interpreter::new();
 
-#[test]
-fn simple_class_usage() {
-    let code = "
-       class User {
-         constructor(name, age) {
-            this.name = name;
-            this.age = age;
-         }
+        let code = "
+            let a = {
+                abc: 10,
+                getAbc: function(a, b) {
+                    return this.abc;
+                },
+                setAbc: function(newValue) {
+                    this.abc = newValue;
+                }
+            };
 
-         getUserInformation() {
-            return 'Name is ' + this.name + ', ' + this.age + ' years old';
-         }
-       }
+            a.getAbc();
+        ";
+        assert_eq!(interpret(&mut interpreter, code), JsValue::Number(10.0));
+        assert_eq!(
+            interpret(&mut interpreter, "a.setAbc(25); a.getAbc();"),
+            JsValue::Number(25.0)
+        );
+    }
 
-       let user = new User('Anton', 26);
-       user.getUserInformation();
-    ";
-    assert_eq!(eval_code(code), JsValue::String("Name is Anton, 26 years old".to_string()));
-}
+    #[test]
+    fn comparison() {
+        let mut interpreter = Interpreter::new();
 
-#[test]
-fn class_proto_of_instance_should_be_equal_to_class_prototype() {
-    let mut interpreter = Interpreter::new();
+        assert_eq!(interpret(&mut interpreter, "'abc' == 'abc'"), JsValue::Boolean(true));
+        assert_eq!(interpret(&mut interpreter, "'abc' == 'qwe'"), JsValue::Boolean(false));
+        assert_eq!(interpret(&mut interpreter, "123 == 123"), JsValue::Boolean(true));
+        assert_eq!(interpret(&mut interpreter, "123 == 456"), JsValue::Boolean(false));
+        assert_eq!(interpret(&mut interpreter, "true == true"), JsValue::Boolean(true));
+        assert_eq!(interpret(&mut interpreter, "true == false"), JsValue::Boolean(false));
+        assert_eq!(interpret(&mut interpreter, "false == false"), JsValue::Boolean(true));
+        assert_eq!(eval_code("let a = {}; let b = {}; a == b;"), JsValue::Boolean(false));
+        assert_eq!(eval_code("let a = {}; let b = a; a == b;"), JsValue::Boolean(true));
+    }
 
-    let code = "
-       class User {
-         constructor(name, age) {
-            this.name = name;
-            this.age = age;
-         }
+    #[test]
+    fn prototype_property_access() {
+        let mut interpreter = Interpreter::new();
 
-         getUserInformation() {
-            return 'Name is ' + this.name + ', ' + this.age + ' years old';
-         }
-       }
+        let code = "
+            let prototype = {
+                a: 10
+            };
 
-       let user = new User('Anton', 26);
-       user.getUserInformation();
-    ";
-    interpret(&mut interpreter, code);
-    let class = interpreter.environment.borrow().borrow().get_variable_value("User");
-    let class_instance = interpreter.environment.borrow().borrow().get_variable_value("user");
+            let target = { b: 30 };
+            setPrototypeOf(target, prototype);
+            target.a;
+        ";
+        assert_eq!(interpret(&mut interpreter, code), JsValue::Number(10.0));
+    }
 
-    if let JsValue::Object(class_object) = &class {
-        if let JsValue::Object(instance_object) = &class_instance {
-            let class_prototype = class_object.borrow().get_prototype();
-            let class_instance_proto = instance_object.borrow().get_proto().unwrap();
+    #[test]
+    fn prototype_mutable_property_access() {
+        let mut interpreter = Interpreter::new();
 
-            if let JsValue::Object(class_prototype) = class_prototype {
-                assert!(Rc::ptr_eq(&class_prototype, &class_instance_proto));
+        let code = "
+            let prototype = {
+                a: 10
+            };
+
+            let target = { b: 30 };
+            setPrototypeOf(target, prototype);
+            prototype.a = 50;
+            target.a;
+        ";
+        assert_eq!(interpret(&mut interpreter, code), JsValue::Number(50.0));
+    }
+
+    #[test]
+    fn two_objects_must_be_checked_for_equality_by_reference() {
+        let code = "
+            let a = { b: { c: 10 } };
+
+            let d = {
+                e: {
+                    f: a
+                }
+            };
+
+            d.e.f == a;
+        ";
+        assert_eq!(eval_code(code), JsValue::Boolean(true));
+
+        let code = "
+            let a = { b: { c: 10 } };
+
+            let d = {
+                e: {
+                    f: {}
+                }
+            };
+
+            d.e.f == a;
+        ";
+        assert_eq!(eval_code(code), JsValue::Boolean(false));
+    }
+
+    #[test]
+    fn simple_class_usage() {
+        let code = "
+            class User {
+                constructor(name, age) {
+                    this.name = name;
+                    this.age = age;
+                }
+
+                getUserInformation() {
+                    return 'Name is ' + this.name + ', ' + this.age + ' years old';
+                }
+            }
+
+            let user = new User('Anton', 26);
+            user.getUserInformation();
+        ";
+        assert_eq!(eval_code(code), JsValue::String("Name is Anton, 26 years old".to_string()));
+    }
+
+    #[test]
+    fn class_proto_of_instance_should_be_equal_to_class_prototype() {
+        let mut interpreter = Interpreter::new();
+
+        let code = "
+            class User {
+                constructor(name, age) {
+                    this.name = name;
+                    this.age = age;
+                }
+
+                getUserInformation() {
+                    return 'Name is ' + this.name + ', ' + this.age + ' years old';
+                }
+            }
+
+            let user = new User('Anton', 26);
+            user.getUserInformation();
+        ";
+        interpret(&mut interpreter, code);
+        let class = interpreter.environment.borrow().borrow().get_variable_value("User");
+        let class_instance = interpreter.environment.borrow().borrow().get_variable_value("user");
+
+        if let JsValue::Object(class_object) = &class {
+            if let JsValue::Object(instance_object) = &class_instance {
+                let class_prototype = class_object.borrow().get_prototype();
+                let class_instance_proto = instance_object.borrow().get_proto().unwrap();
+
+                if let JsValue::Object(class_prototype) = class_prototype {
+                    assert!(Rc::ptr_eq(&class_prototype, &class_instance_proto));
+                }
             }
         }
     }
-}
 
-#[test]
-fn prototypes_of_instances_of_same_class_equals() {
-    let mut interpreter = Interpreter::new();
-    let code = "
-        class A { constructor(a) { this.a = a; } }
-        new A();
-    ";
-    let class_instance1 = interpret(&mut interpreter, code);
-    let class_instance2 = interpret(&mut interpreter, "new A();");
+    #[test]
+    fn prototypes_of_instances_of_same_class_equals() {
+        let mut interpreter = Interpreter::new();
+        let code = "
+            class A { constructor(a) { this.a = a; } }
+            new A();
+        ";
+        let class_instance1 = interpret(&mut interpreter, code);
+        let class_instance2 = interpret(&mut interpreter, "new A();");
 
-    if let JsValue::Object(object1) = &class_instance1 {
-        if let JsValue::Object(object2) = &class_instance2 {
-            let prototype1 = object1.borrow().get_proto().unwrap();
-            let prototype2 = object2.borrow().get_proto().unwrap();
-            assert!(Rc::ptr_eq(&prototype1, &prototype2));
+        if let JsValue::Object(object1) = &class_instance1 {
+            if let JsValue::Object(object2) = &class_instance2 {
+                let prototype1 = object1.borrow().get_proto().unwrap();
+                let prototype2 = object2.borrow().get_proto().unwrap();
+                assert!(Rc::ptr_eq(&prototype1, &prototype2));
+            }
         }
     }
-}
 
-#[test]
-fn function_constructor_as_class() {
-    let code = "
-        function User(name, age) {
-            this.name = name;
-            this.age = age;
-        }
+    #[test]
+    fn function_constructor_as_class() {
+        let code = "
+            function User(name, age) {
+                this.name = name;
+                this.age = age;
+            }
 
-        console.log(User.prototype);
+            console.log(User.prototype);
 
-        User.prototype.getUserInformation = function() {
-            return 'Name is ' + this.name + ', ' + this.age + ' years old';
-        }
+            User.prototype.getUserInformation = function() {
+                return 'Name is ' + this.name + ', ' + this.age + ' years old';
+            }
 
-        let user = new User('Anton', 26);
-        user.getUserInformation();
-    ";
-    assert_eq!(eval_code(code), JsValue::String("Name is Anton, 26 years old".to_string()));
-}
+            let user = new User('Anton', 26);
+            user.getUserInformation();
+        ";
+        assert_eq!(eval_code(code), JsValue::String("Name is Anton, 26 years old".to_string()));
+    }
 
-#[test]
-#[should_panic(expected = "Assignment to constant variable.")]
-fn attempt_to_reassign_constant_variable_should_error() {
-    let code = "
-        const a = 5;
-        a = 10;
-    ";
-    eval_code(code);
-}
+    #[test]
+    #[should_panic(expected = "Assignment to constant variable.")]
+    fn attempt_to_reassign_constant_variable_should_error() {
+        let code = "
+          const a = 5;
+          a = 10;
+        ";
+        eval_code(code);
+    }
 
-#[test]
-fn template_strings_works() {
-    let code = "
-        const a = 5;
-        const b = 'Hello';
-        const c = 'World';
-        `-- before ${a + 2} ${b} ${c} after--`
-    ";
-    assert_eq!(eval_code(code), JsValue::String("-- before 7 Hello World after--".to_string()));
-}
+    #[test]
+    fn template_strings_works() {
+        let code = "
+          const a = 5;
+          const b = 'Hello';
+          const c = 'World';
+          `-- before ${a + 2} ${b} ${c} after--`
+        ";
+        assert_eq!(eval_code(code), JsValue::String("-- before 7 Hello World after--".to_string()));
+    }
 
-#[test]
-fn negative_number_works() {
-    assert_eq!(eval_code("-1"), JsValue::Number(-1.0));
-    assert_eq!(eval_code("-(-1)"), JsValue::Number(1.0));
-}
+    #[test]
+    fn negative_number_works() {
+        assert_eq!(eval_code("-1"), JsValue::Number(-1.0));
+        assert_eq!(eval_code("-(-1)"), JsValue::Number(1.0));
+    }
 
-#[test]
-fn logical_not_unary_operator_works_with_boolean() {
-    assert_eq!(eval_code("!true"), JsValue::Boolean(false));
-    assert_eq!(eval_code("!false"), JsValue::Boolean(true));
-    assert_eq!(eval_code("!!true"), JsValue::Boolean(true));
-    assert_eq!(eval_code("!!false"), JsValue::Boolean(false));
+    #[test]
+    fn logical_not_unary_operator_works_with_boolean() {
+        assert_eq!(eval_code("!true"), JsValue::Boolean(false));
+        assert_eq!(eval_code("!false"), JsValue::Boolean(true));
+        assert_eq!(eval_code("!!true"), JsValue::Boolean(true));
+        assert_eq!(eval_code("!!false"), JsValue::Boolean(false));
+    }
 }

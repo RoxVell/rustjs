@@ -25,14 +25,12 @@ impl<'a> BytecodePrinter<'a> {
 
         while self.pos.get() < self.code_block.bytecode.len() {
             let address = format!("{:#06X}", self.pos.get());
-            // print!("{address:<WIDTH$}", WIDTH=Self::ADDRESS_COLUMN_WIDTH);
             let opcode: Opcode = self.read_byte().into();
 
             let (opcode, operands) = match opcode {
                 Opcode::PushLiteral => {
                     let index = self.read_byte();
                     ("PushLiteral".to_string(), format!("index #{} ({})", index, self.code_block.constants[index as usize]))
-                    // println!("PushLiteral\tindex #{} ({})", index, self.code_block.constants[index as usize]);
                 },
                 Opcode::PushTrue => ("PushTrue".to_string(), "".to_string()),
                 Opcode::PushFalse => ("PushFalse".to_string(), "".to_string()),
@@ -59,44 +57,36 @@ impl<'a> BytecodePrinter<'a> {
                 Opcode::ExitScope => {
                     let n_pop = self.read_byte();
                     ("ExitScope".to_string(), n_pop.to_string())
-                    // println!("ExitScope\t{n_pop}");
                 },
                 Opcode::Jump => {
                     let index = self.read_byte();
                     ("Jump".to_string(), format!("{:#04X}", index))
-                    // println!("Jump\t\t{:#04X}", index);
                 },
                 Opcode::JumpIfFalse => {
                     let index = self.read_byte();
                     ("JumpIfFalse".to_string(), format!("{index:#04X}"))
-                    // println!("JumpIfFalse\t{index:#04X}");
                 }
                 Opcode::SetVar => {
                     let index = self.read_byte();
                     ("SetVar".to_string(), format!("{index} ({})", self.code_block.locals[index as usize].name))
-                    // println!("SetVar\t\t{index} ({})", self.code_block.locals[index as usize].name);
                 },
                 Opcode::GetVar => {
                     let index = self.read_byte();
                     ("GetVar".to_string(), format!("{index} ({})", self.code_block.locals[index as usize].name))
-                    // println!("GetVar\t\t{index} ({})", self.code_block.locals[index as usize].name);
                 },
                 Opcode::GetGlobal => {
                     let index = self.read_byte();
                     ("GetGlobal".to_string(), format!("{index} ({})", self.globals[index as usize].name))
-                    // println!("GetGlobal\t{index} ({})", self.globals[index as usize].name);
                 },
                 Opcode::Call => {
                     let params_count = self.read_byte();
                     ("Call".to_string(), params_count.to_string())
-                    // println!("Call\t\t{params_count}");
                 }
             };
             println!("{address:<ADDRESS_WIDTH$}{opcode:<OPCODE_WIDTH$}{operands:<}",
                 ADDRESS_WIDTH=Self::ADDRESS_COLUMN_WIDTH,
                 OPCODE_WIDTH=Self::OPCODE_NAME_COLUMN_WIDTH
             );
-            // print!("{opcode}")
         }
         println!("---------------- END {:?}----------------\n", self.code_block.name);
     }

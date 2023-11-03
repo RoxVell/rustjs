@@ -1,10 +1,10 @@
-use std::mem;
 use crate::bytecode::opcodes::Opcode;
 use crate::nodes::*;
 use crate::value::function::JsFunction;
-use crate::value::JsValue;
 use crate::value::object::JsObject;
+use crate::value::JsValue;
 use crate::visitor::Visitor;
+use std::mem;
 
 #[derive(Debug)]
 pub struct GlobalVariable {
@@ -14,10 +14,7 @@ pub struct GlobalVariable {
 
 impl GlobalVariable {
     pub fn new(name: String, value: JsValue) -> Self {
-        Self {
-            name,
-            value
-        }
+        Self { name, value }
     }
 }
 
@@ -61,7 +58,7 @@ impl<'a> BytecodeCompiler<'a> {
         Self {
             code_block: CodeBlock::new("main".to_string(), 0),
             code_blocks: vec![],
-            globals
+            globals,
         }
     }
 
@@ -82,9 +79,16 @@ impl<'a> BytecodeCompiler<'a> {
     // }
 
     fn get_global_variable_index(&mut self, variable_name: &str) -> u8 {
-        self.globals.iter()
+        self.globals
+            .iter()
             .rposition(|x| x.name == variable_name)
-            .expect(format!("Failed to get global variable index for variable name: {}", variable_name).as_str()) as u8
+            .expect(
+                format!(
+                    "Failed to get global variable index for variable name: {}",
+                    variable_name
+                )
+                .as_str(),
+            ) as u8
     }
 
     fn add_constant(&mut self, value: JsValue) -> usize {
@@ -95,7 +99,7 @@ impl<'a> BytecodeCompiler<'a> {
                 self.code_block.constants.push(value);
                 self.code_block.constants.len() - 1
             }
-            Some(idx) => idx
+            Some(idx) => idx,
         }
     }
 
@@ -105,12 +109,17 @@ impl<'a> BytecodeCompiler<'a> {
     }
 
     fn add_local_variable(&mut self, variable_name: String) -> u8 {
-        self.code_block.locals.push(LocalVariable { name: variable_name, scope_level: self.code_block.scope_level });
+        self.code_block.locals.push(LocalVariable {
+            name: variable_name,
+            scope_level: self.code_block.scope_level,
+        });
         (self.code_block.locals.len() - 1) as u8
     }
 
     fn get_local_variable_index(&mut self, variable_name: &str) -> Option<u8> {
-        self.code_block.locals.iter()
+        self.code_block
+            .locals
+            .iter()
             .rposition(|x| x.name == variable_name)
             .map(|x| x as u8)
     }
@@ -185,11 +194,7 @@ impl<'a> BytecodeCompiler<'a> {
         self.exit_scope();
     }
 
-    fn push_member_expression_key(
-        &mut self,
-        node: &AstExpression,
-        computed: bool,
-    ) {
+    fn push_member_expression_key(&mut self, node: &AstExpression, computed: bool) {
         if computed {
             // todo!("implement computed properties")
             self.visit_expression(node);
@@ -206,7 +211,8 @@ impl<'a> BytecodeCompiler<'a> {
                 AstExpression::NumberLiteral(node) => Ok(node.value.to_string()),
                 AstExpression::Identifier(node) => Ok(node.id.clone()),
                 _ => Err("Object key should be an identifier".to_string()),
-            }.unwrap();
+            }
+            .unwrap();
 
             self.push_literal(JsValue::from(key));
         }
@@ -279,8 +285,8 @@ impl<'a> Visitor for BytecodeCompiler<'a> {
             &mut self.code_block,
             CodeBlock::new(
                 stmt.function_signature.name.id.clone(),
-                stmt.function_signature.arguments.len() as u8
-            )
+                stmt.function_signature.arguments.len() as u8,
+            ),
         );
 
         self.add_local_variable(stmt.function_signature.name.id.clone());
@@ -292,15 +298,18 @@ impl<'a> Visitor for BytecodeCompiler<'a> {
         self.visit_statement(stmt.function_signature.body.as_ref());
         let fn_value: JsValue = JsFunction::Bytecode(self.code_block.clone()).into();
         let co = mem::replace(&mut self.code_block, prev_code_block);
-        let constant_idx = self.add_constant(fn_value);
-        self.emit(Opcode::PushLiteral, &[constant_idx as u8]);
+        self.push_literal(fn_value);
+        // let constant_idx = self.add_constant(fn_value);
+        // self.emit(Opcode::PushLiteral, &[constant_idx as u8]);
         self.add_local_variable(stmt.function_signature.name.id.clone());
         self.code_blocks.push(co);
     }
 
     fn visit_function_signature(&mut self, stmt: &FunctionSignature) {
         self.visit_identifier_node(&stmt.name);
-        stmt.arguments.iter().for_each(|x| self.visit_function_argument(x));
+        stmt.arguments
+            .iter()
+            .for_each(|x| self.visit_function_argument(x));
         self.visit_statement(&stmt.body);
     }
 
@@ -368,7 +377,9 @@ impl<'a> Visitor for BytecodeCompiler<'a> {
     }
 
     fn visit_function_expression(&mut self, node: &FunctionExpressionNode) {
-        node.arguments.iter().for_each(|x| self.visit_function_argument(x));
+        node.arguments
+            .iter()
+            .for_each(|x| self.visit_function_argument(x));
         self.visit_statement(&node.body);
     }
 
@@ -415,7 +426,7 @@ impl<'a> Visitor for BytecodeCompiler<'a> {
                 TemplateElement::Raw(raw_str) => {
                     self.push_literal(JsValue::String(raw_str.clone()));
                 }
-                TemplateElement::Expression(expression) => self.visit_expression(expression)
+                TemplateElement::Expression(expression) => self.visit_expression(expression),
             };
 
             if i != node.elements.len() - 1 {
@@ -442,7 +453,7 @@ impl<'a> Visitor for BytecodeCompiler<'a> {
                 AssignmentOperator::DivEqual => Opcode::Div,
                 AssignmentOperator::MulEqual => Opcode::Mul,
                 AssignmentOperator::ExponentiationEqual => Opcode::MulMul,
-                _ => unreachable!()
+                _ => unreachable!(),
             };
             self.emit_opcode(opcode);
         }
@@ -472,7 +483,7 @@ impl<'a> Visitor for BytecodeCompiler<'a> {
             BinaryOperator::LessThan => Opcode::Less,
             BinaryOperator::LessThanOrEqual => Opcode::LessOrEqual,
             BinaryOperator::Equality => Opcode::Eq,
-            BinaryOperator::Inequality =>  Opcode::Neq,
+            BinaryOperator::Inequality => Opcode::Neq,
         };
         self.emit_opcode(opcode);
     }
@@ -519,3 +530,4 @@ impl<'a> Visitor for BytecodeCompiler<'a> {
 //     bytecode_compiler.compile(&ast);
 //     bytecode_compiler.code_block
 // }
+

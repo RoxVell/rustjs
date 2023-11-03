@@ -1,5 +1,6 @@
 use std::rc::Rc;
 use std::cell::RefCell;
+use crate::Source;
 use crate::symbol_checker::diagnostics::{ConstantAssigningDiagnostic, ManualImplOfAssignOperationDiagnostic, MultipleAssignmentDiagnostic, UnusedVariableDiagnostic, VariableNotDefinedDiagnostic, WrongBreakContextDiagnostic, WrongThisContextDiagnostic};
 
 pub struct DiagnosticBag<'a> {
@@ -40,11 +41,11 @@ pub enum DiagnosticKind {
 #[derive(Debug)]
 pub struct Diagnostic<'a> {
     kind: DiagnosticKind,
-    source: &'a str
+    source: &'a Source,
 }
 
 impl<'a> Diagnostic<'a> {
-    pub(crate) fn new(kind: DiagnosticKind, source: &'a str) -> Self {
+    pub(crate) fn new(kind: DiagnosticKind, source: &'a Source) -> Self {
         Self {
             kind,
             source,
@@ -65,5 +66,5 @@ impl<'a> Diagnostic<'a> {
 }
 
 pub trait PrintDiagnostic {
-    fn print_diagnostic(&self, source: &str);
+    fn print_diagnostic(&self, source: &Source);
 }

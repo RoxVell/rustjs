@@ -1,32 +1,33 @@
+use ariadne::{Color, Label, Report, ReportKind};
 use crate::scanner::{Scanner, Token, TokenKind};
-use ariadne::{Color, Label, Report, ReportKind, Source};
 use crate::nodes::*;
 use crate::nodes::AstExpression::UnaryExpression;
+use crate::Source;
 
 #[derive(Default)]
 pub struct Parser {
     prev_token: Option<Token>,
     current_token: Option<Token>,
     scanner: Scanner,
-    source: String,
+    source: Source,
 }
 
 pub type AstExpressionResult = Result<AstExpression, String>;
 pub type AstStatementResult = Result<AstStatement, String>;
 
 impl Parser {
-    pub fn parse_code_to_ast(code: &str) -> AstStatementResult {
+    pub fn parse_code_to(code: Source) -> AstStatementResult {
         let mut parser = Parser::default();
         return parser.parse(code);
     }
 
-    pub fn set_new_source(&mut self, source: &str) {
-        self.source = source.to_string();
-        self.scanner = Scanner::new(source.to_string());
+    pub fn set_new_source(&mut self, source: Source) {
+        self.source = source;
+        self.scanner = Scanner::new(self.source.code().to_string());
         self.current_token = self.scanner.next_token();
     }
 
-    pub fn parse(&mut self, source: &str) -> AstStatementResult {
+    pub fn parse(&mut self, source: Source) -> AstStatementResult {
         self.set_new_source(source);
 
         let mut statements: Vec<AstStatement> = vec![];
@@ -506,16 +507,17 @@ impl Parser {
             Some(TokenKind::OpenBrace) => return self.parse_object_literal(),
             _ => {
                 let token = self.current_token.as_ref().unwrap();
+                let filename = self.source.filename();
 
-                Report::build(ReportKind::Error, (), token.span.start.row)
+                Report::build(ReportKind::Error, filename, token.span.start.row)
                     .with_message("Unexpected token found")
                     .with_label(
-                        Label::new(token.span.start.row..token.span.end.row)
+                        Label::new((filename, token.span.start.row..token.span.end.row))
                             .with_message("Unexpected token")
                             .with_color(Color::Red),
                     )
                     .finish()
-                    .print(Source::from(&self.source))
+                    .print((filename, ariadne::Source::from(&self.source.code())))
                     .unwrap();
 
                 unimplemented!()
@@ -786,7 +788,8 @@ impl Parser {
                         // Trick to get correct token spans
                         let mut string_with_whitespaces = " ".repeat(start_template_pos + prev_pos);
                         string_with_whitespaces.push_str(&str[prev_pos..pos - 1]);
-                        parser.set_new_source(&string_with_whitespaces);
+                        let source = Source::inline_source(string_with_whitespaces);
+                        parser.set_new_source(source);
                         let expression = parser.parse_expression()
                             .expect(format!("Error during template parsing, expression: '{str}'").as_str());
                         template_elements.push(TemplateElement::Expression(expression));
@@ -877,14 +880,16 @@ impl Parser {
                 current_token.token.to_keyword()
             );
 
-            Report::build(ReportKind::Error, (), current_token.span.start.row)
+            let filename = self.source.filename();
+
+            Report::build(ReportKind::Error, filename, current_token.span.start.row)
                 .with_message("Unexpected token found")
                 .with_label(
-                    Label::new(current_token.span.start.row..current_token.span.end.row)
+                    Label::new((filename, current_token.span.start.row..current_token.span.end.row))
                         .with_message(&error_message),
                 )
                 .finish()
-                .print(Source::from(self.source.clone()))
+                .print((filename, ariadne::Source::from(self.source.code())))
                 .unwrap();
 
             panic!("{error_message}");

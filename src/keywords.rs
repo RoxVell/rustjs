@@ -28,63 +28,34 @@ pub const STATIC_KEYWORD: &'static str = "static";
 pub const SWITCH_KEYWORD: &'static str = "switch";
 pub const RETURN_KEYWORD: &'static str = "return";
 
-pub const KEYWORDS: [&'static str; 29] = [
-    THIS_KEYWORD,
-    UNDEFINED_KEYWORD,
-    NULL_KEYWORD,
-    FUNCTION_KEYWORD,
-    TRUE_KEYWORD,
-    FALSE_KEYWORD,
-    IF_KEYWORD,
-    ELSE_KEYWORD,
-    WHILE_KEYWORD,
-    DO_KEYWORD,
-    FOR_KEYWORD,
-    IN_KEYWORD,
-    NEW_KEYWORD,
-    CLASS_KEYWORD,
-    EXTENDS_KEYWORD,
-    CONST_KEYWORD,
-    LET_KEYWORD,
-    TRY_KEYWORD,
-    CATCH_KEYWORD,
-    BREAK_KEYWORD,
-    CONTINUE_KEYWORD,
-    SUPER_KEYWORD,
-    THROW_KEYWORD,
-    YIELD_KEYWORD,
-    IMPORT_KEYWORD,
-    EXPORT_KEYWORD,
-    STATIC_KEYWORD,
-    SWITCH_KEYWORD,
-    RETURN_KEYWORD,
-];
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+// pub const KEYWORDS: [&'static str; 29] = [
+//     THIS_KEYWORD,
+//     UNDEFINED_KEYWORD,
+//     NULL_KEYWORD,
+//     FUNCTION_KEYWORD,
+//     TRUE_KEYWORD,
+//     FALSE_KEYWORD,
+//     IF_KEYWORD,
+//     ELSE_KEYWORD,
+//     WHILE_KEYWORD,
+//     DO_KEYWORD,
+//     FOR_KEYWORD,
+//     IN_KEYWORD,
+//     NEW_KEYWORD,
+//     CLASS_KEYWORD,
+//     EXTENDS_KEYWORD,
+//     CONST_KEYWORD,
+//     LET_KEYWORD,
+//     TRY_KEYWORD,
+//     CATCH_KEYWORD,
+//     BREAK_KEYWORD,
+//     CONTINUE_KEYWORD,
+//     SUPER_KEYWORD,
+//     THROW_KEYWORD,
+//     YIELD_KEYWORD,
+//     IMPORT_KEYWORD,
+//     EXPORT_KEYWORD,
+//     STATIC_KEYWORD,
+//     SWITCH_KEYWORD,
+//     RETURN_KEYWORD,
+// ];

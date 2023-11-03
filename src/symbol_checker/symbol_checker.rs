@@ -4,12 +4,13 @@ use std::collections::HashMap;
 use crate::diagnostic::{Diagnostic, DiagnosticBagRef, DiagnosticKind};
 use crate::nodes::*;
 use crate::scanner::{TextSpan, Token};
+use crate::Source;
 use crate::symbol_checker::diagnostics::{ConstantAssigningDiagnostic, ManualImplOfAssignOperationDiagnostic, MultipleAssignmentDiagnostic, UnusedVariableDiagnostic, VariableNotDefinedDiagnostic, WrongBreakContextDiagnostic, WrongThisContextDiagnostic};
 use crate::visitor::Visitor;
 
 /// Should traverse ast and find unused variables & assigning to constant variables
 pub struct SymbolChecker<'a> {
-    source: &'a str,
+    source: &'a Source,
     environment: RefCell<LightEnvironmentRef>,
     diagnostic_bag: DiagnosticBagRef<'a>,
     is_inside_this_context: bool,
@@ -17,7 +18,7 @@ pub struct SymbolChecker<'a> {
 }
 
 impl<'a> SymbolChecker<'a> {
-    pub fn new(source: &'a str, diagnostic_bag: DiagnosticBagRef<'a>, globals: Vec<String>) -> Self {
+    pub fn new(source: &'a Source, diagnostic_bag: DiagnosticBagRef<'a>, globals: Vec<String>) -> Self {
         let global_environment = LightEnvironment::with_symbols(globals);
 
         Self {
