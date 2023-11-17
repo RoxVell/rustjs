@@ -35,6 +35,7 @@ mod null_literal_node;
 mod undefined_literal_node;
 mod template_string_literal;
 mod unary_expression;
+mod break_statement;
 
 pub use object_property::*;
 pub use function_signature::*;
@@ -57,6 +58,7 @@ pub use undefined_literal_node::UndefinedLiteralNode;
 pub use crate::nodes::array_expression::ArrayExpressionNode;
 pub use crate::nodes::assignment_expression::{AssignmentExpressionNode, AssignmentOperator};
 pub use crate::nodes::binary_expression::{BinaryExpressionNode, BinaryOperator};
+pub use crate::nodes::break_statement::BreakStatementNode;
 pub use crate::nodes::call_expression::CallExpressionNode;
 pub use crate::nodes::conditional_expression::ConditionalExpressionNode;
 pub use crate::nodes::function_declaration::FunctionDeclarationNode;
@@ -69,6 +71,7 @@ pub use crate::nodes::this_expression::ThisExpressionNode;
 pub use crate::nodes::unary_expression::{UnaryExpressionNode, UnaryOperator};
 
 #[derive(Debug, Clone, PartialEq)]
+#[enum_dispatch(Execute)]
 pub enum AstStatement {
     ProgramStatement(ProgramNode),
     VariableDeclaration(VariableDeclarationNode),
@@ -79,7 +82,13 @@ pub enum AstStatement {
     ReturnStatement(ReturnStatementNode),
     ExpressionStatement(AstExpression),
     IfStatement(IfStatementNode),
-    BreakStatement(Token),
+    BreakStatement(BreakStatementNode),
+}
+
+impl AsRef<AstStatement> for AstStatement {
+    fn as_ref(&self) -> &AstStatement {
+        &self
+    }
 }
 
 impl Execute for Vec<AstStatement> {
@@ -91,23 +100,6 @@ impl Execute for Vec<AstStatement> {
         }
 
         Ok(result)
-    }
-}
-
-impl Execute for AstStatement {
-    fn execute(&self, interpreter: &Interpreter) -> Result<JsValue, String> {
-        match self {
-            AstStatement::ProgramStatement(node) => node.execute(interpreter),
-            AstStatement::VariableDeclaration(node) => node.execute(interpreter),
-            AstStatement::BlockStatement(node) => node.execute(interpreter),
-            AstStatement::WhileStatement(node) => node.execute(interpreter),
-            AstStatement::ForStatement(node) => node.execute(interpreter),
-            AstStatement::FunctionDeclaration(node) => node.execute(interpreter),
-            AstStatement::ReturnStatement(node) => node.execute(interpreter),
-            AstStatement::ExpressionStatement(node) => node.execute(interpreter),
-            AstStatement::IfStatement(node) => node.execute(interpreter),
-            AstStatement::BreakStatement(_) => todo!(),
-        }
     }
 }
 
@@ -133,12 +125,6 @@ pub enum AstExpression {
     ClassDeclaration(ClassDeclarationNode),
     ArrayExpression(ArrayExpressionNode),
     UnaryExpression(UnaryExpressionNode),
-}
-
-impl Into<AstStatement> for AstExpression {
-    fn into(self) -> AstStatement {
-        AstStatement::ExpressionStatement(self)
-    }
 }
 
 impl GetSpan for AstExpression {
@@ -171,4 +157,59 @@ impl GetSpan for AstExpression {
 #[enum_dispatch]
 pub trait Execute {
     fn execute(&self, interpreter: &Interpreter) -> Result<JsValue, String>;
+}
+
+#[enum_dispatch]
+pub trait IsSimple {
+    /// checks whether a node is "simple", meaning it can be computed at the compile stage
+    fn is_simple(&self) -> bool;
+}
+
+impl IsSimple for AstStatement {
+    fn is_simple(&self) -> bool {
+        match self {
+            AstStatement::ProgramStatement(node) => node.statements.iter().all(|x| x.is_simple()),
+            AstStatement::BlockStatement(node) => node.statements.iter().all(|x| x.is_simple()),
+            AstStatement::ExpressionStatement(node) => node.is_simple(),
+            AstStatement::IfStatement(node) => {
+                if node.condition.is_simple() {
+                    node.then_branch.is_simple()
+                } else {
+                    node.else_branch.is_some() && node.else_branch.as_ref().unwrap().is_simple()
+                }
+            }
+            AstStatement::BreakStatement(_)
+                | AstStatement::ForStatement(_)
+                | AstStatement::WhileStatement(_)
+                | AstStatement::FunctionDeclaration(_)
+                | AstStatement::ReturnStatement(_)
+                | AstStatement::VariableDeclaration(_) => false,
+        }
+    }
+}
+
+impl IsSimple for AstExpression {
+    fn is_simple(&self) -> bool {
+        match self {
+            AstExpression::StringLiteral(_)
+                | AstExpression::NumberLiteral(_)
+                | AstExpression::NullLiteral(_)
+                | AstExpression::UndefinedLiteral(_)
+                | AstExpression::BooleanLiteral(_) => true,
+            AstExpression::ThisExpression(_)
+                | AstExpression::Identifier(_)
+                | AstExpression::AssignmentExpression(_)
+                | AstExpression::CallExpression(_)
+                | AstExpression::MemberExpression(_)
+                | AstExpression::NewExpression(_)
+                | AstExpression::ObjectExpression(_)
+                | AstExpression::ClassDeclaration(_)
+                | AstExpression::ArrayExpression(_)
+                | AstExpression::FunctionExpression(_) => false,
+            AstExpression::TemplateStringLiteral(node) => node.elements.iter().all(|x| x.is_simple()),
+            AstExpression::BinaryExpression(node) => node.left.is_simple() && node.right.is_simple(),
+            AstExpression::ConditionalExpression(node) => if node.test.is_simple() { node.consequent.is_simple() } else { node.alternative.is_simple() },
+            AstExpression::UnaryExpression(node) => node.expression.is_simple(),
+        }
+    }
 }

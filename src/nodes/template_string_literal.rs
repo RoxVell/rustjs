@@ -1,6 +1,6 @@
 use std::fmt::{Debug};
 use crate::interpreter::ast_interpreter::{Interpreter};
-use crate::nodes::{AstExpression, Execute};
+use crate::nodes::{AstExpression, Execute, IsSimple};
 use crate::scanner::Token;
 use crate::value::JsValue;
 
@@ -57,6 +57,21 @@ impl Execute for TemplateStringLiteralNode {
         }
 
         Ok(JsValue::String(result))
+    }
+}
+
+impl IsSimple for TemplateElement {
+    fn is_simple(&self) -> bool {
+        match self {
+            TemplateElement::Raw(_) => true,
+            TemplateElement::Expression(expression) => expression.is_simple(),
+        }
+    }
+}
+
+impl IsSimple for TemplateStringLiteralNode {
+    fn is_simple(&self) -> bool {
+        self.elements.iter().all(|x| x.is_simple())
     }
 }
 

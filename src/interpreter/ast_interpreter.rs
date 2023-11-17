@@ -1,11 +1,10 @@
-use std::cell::RefCell;
-use std::rc::Rc;
 use crate::interpreter::environment::{Environment, EnvironmentRef};
 use crate::nodes::{AstExpression, AstStatement, Execute, FunctionArgument};
-use crate::{Source};
 use crate::value::function::{AstCallable, JsFunction, JsFunctionArg, NativeCallable};
-use crate::value::JsValue;
 use crate::value::object::{JsObject, ObjectKind};
+use crate::value::JsValue;
+use std::cell::RefCell;
+use std::rc::Rc;
 
 pub struct Interpreter {
     pub environment: RefCell<EnvironmentRef>,
@@ -17,6 +16,16 @@ impl Interpreter {
         Self {
             environment: RefCell::new(Rc::new(RefCell::new(environment))),
         }
+    }
+
+    pub fn eval_statement<T: AsRef<AstStatement>>(statement: T) -> Result<JsValue, String> {
+        let interpreter = Interpreter::new();
+        statement.as_ref().execute(&interpreter)
+    }
+
+    pub fn eval_expression(expression: AstExpression) -> Result<JsValue, String> {
+        let interpreter = Interpreter::new();
+        expression.execute(&interpreter)
     }
 
     pub fn with_environment(environment: Environment) -> Self {
@@ -64,7 +73,12 @@ impl Interpreter {
         return Ok(right.clone());
     }
 
-    pub(crate) fn call_function(&self, callee: &AstExpression, arguments: &Vec<AstExpression>, is_new: bool) -> Result<JsValue, String> {
+    pub(crate) fn call_function(
+        &self,
+        callee: &AstExpression,
+        arguments: &Vec<AstExpression>,
+        is_new: bool,
+    ) -> Result<JsValue, String> {
         // println!("call_function {callee:?}");
         let calleer = callee.execute(self)?;
 
@@ -124,7 +138,7 @@ impl Interpreter {
                         self.pop_environment();
                         return result;
                     }
-                    _ => unreachable!()
+                    _ => unreachable!(),
                 }
             }
         }
@@ -155,7 +169,7 @@ impl Interpreter {
         JsFunction::ordinary_function(
             arguments,
             Box::new(body.clone()),
-            self.environment.borrow().clone()
+            self.environment.borrow().clone(),
         )
     }
 
@@ -183,6 +197,7 @@ impl Interpreter {
     }
 }
 
+// TODO: use globals package
 fn get_global_environment() -> Environment {
     fn console_log(arguments: &[JsValue]) -> Result<JsValue, String> {
         let result = arguments
@@ -205,9 +220,7 @@ fn get_global_environment() -> Environment {
                 .expect("Expected second argument to be a prototype object");
 
             if let JsValue::Object(prototype_obj) = prototype {
-                target_obj
-                    .borrow_mut()
-                    .set_proto(prototype_obj.clone());
+                target_obj.borrow_mut().set_proto(prototype_obj.clone());
             } else {
                 return Err(format!(
                     "Second arguments should be of type object, but got: {}",
@@ -227,7 +240,7 @@ fn get_global_environment() -> Environment {
     fn performance_now(_: &[JsValue]) -> Result<JsValue, String> {
         return Ok(JsValue::Number(
             std::time::SystemTime::now()
-                .duration_since( std::time::SystemTime::UNIX_EPOCH)
+                .duration_since(std::time::SystemTime::UNIX_EPOCH)
                 .unwrap()
                 .as_millis() as f64,
         ));
@@ -237,7 +250,12 @@ fn get_global_environment() -> Environment {
         assert_eq!(args.len(), 1);
 
         if let JsValue::Object(object) = &args[0] {
-            let keys: Vec<JsValue> = object.borrow().properties.keys().map(|x| JsValue::String(x.clone())).collect();
+            let keys: Vec<JsValue> = object
+                .borrow()
+                .properties
+                .keys()
+                .map(|x| JsValue::String(x.clone()))
+                .collect();
             return Ok(JsValue::Object(JsObject::array(keys).to_ref()));
         }
 
@@ -248,7 +266,12 @@ fn get_global_environment() -> Environment {
         assert_eq!(args.len(), 1);
 
         if let JsValue::Object(object) = &args[0] {
-            let values: Vec<JsValue> = object.borrow().properties.values().map(|x| x.clone()).collect();
+            let values: Vec<JsValue> = object
+                .borrow()
+                .properties
+                .values()
+                .map(|x| x.clone())
+                .collect();
             return Ok(JsValue::Object(JsObject::array(values).to_ref()));
         }
 
@@ -260,7 +283,8 @@ fn get_global_environment() -> Environment {
 
         if let JsValue::Object(object) = &args[0] {
             let properties = &object.borrow().properties;
-            let values: Vec<JsValue> = properties.keys()
+            let values: Vec<JsValue> = properties
+                .keys()
                 .zip(properties.values())
                 .map(|(key, value)| {
                     JsObject::array(vec![JsValue::String(key.clone()), value.clone()]).to_js_value()
@@ -275,47 +299,62 @@ fn get_global_environment() -> Environment {
     Environment::with_variables([
         (
             "console".to_string(),
-            (true, JsValue::object([
-                ("log".to_string(), JsValue::native_function(console_log)),
-            ])),
+            (
+                true,
+                JsValue::object([("log".to_string(), JsValue::native_function(console_log))]),
+            ),
         ),
-        ("print".to_string(), (true, JsValue::native_function(console_log))),
+        (
+            "print".to_string(),
+            (true, JsValue::native_function(console_log)),
+        ),
         (
             "setPrototypeOf".to_string(),
-            (true, JsValue::native_function(set_prototype),)
+            (true, JsValue::native_function(set_prototype)),
         ),
         (
             "performance".to_string(),
-            (true, JsValue::object([
-                ("now".to_string(), JsValue::native_function(performance_now))
-            ]),)
+            (
+                true,
+                JsValue::object([("now".to_string(), JsValue::native_function(performance_now))]),
+            ),
         ),
         (
             "Object".to_string(),
-            (true, JsValue::object([
-                ("keys".to_string(), JsValue::native_function(object_keys)),
-                ("values".to_string(), JsValue::native_function(object_values)),
-                ("entries".to_string(), JsValue::native_function(object_entries)),
-            ])),
-        )
+            (
+                true,
+                JsValue::object([
+                    ("keys".to_string(), JsValue::native_function(object_keys)),
+                    (
+                        "values".to_string(),
+                        JsValue::native_function(object_values),
+                    ),
+                    (
+                        "entries".to_string(),
+                        JsValue::native_function(object_entries),
+                    ),
+                ]),
+            ),
+        ),
     ])
-}
-
-fn interpret(interpreter: &mut Interpreter, code: &str) -> JsValue {
-    let source = Source::inline_source(code.to_string());
-
-    let ast = crate::parser::Parser::parse_code_to(source)
-        .expect(format!("Error occurred during parsing").as_str());
-
-    interpreter.interpret(&ast).unwrap()
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::source::Source;
     use super::*;
 
+    fn interpret(interpreter: &mut Interpreter, code: &str) -> JsValue {
+        let source = Rc::new(Source::inline_source(code.to_string()));
+
+        let ast = crate::parser::Parser::parse_code_to(source)
+            .expect(format!("Error occurred during parsing").as_str());
+
+        interpreter.interpret(&ast).unwrap()
+    }
+
     pub fn eval_code(code: &str) -> JsValue {
-        let source = Source::inline_source(code.to_string());
+        let source = Rc::new(Source::inline_source(code.to_string()));
         let interpreter = Interpreter::new();
 
         let ast = crate::parser::Parser::parse_code_to(source)
@@ -330,7 +369,9 @@ mod tests {
         let variable_value = JsValue::Number(123.0);
 
         let mut parent_env = Environment::default();
-        parent_env.define_variable(variable_name.to_string(), variable_value.clone(), false).unwrap();
+        parent_env
+            .define_variable(variable_name.to_string(), variable_value.clone(), false)
+            .unwrap();
 
         let child_env = Environment::new(Rc::new(RefCell::new(parent_env)));
         let value_from_parent_env = child_env.get_variable_value(variable_name);
@@ -562,15 +603,42 @@ mod tests {
     fn comparison() {
         let mut interpreter = Interpreter::new();
 
-        assert_eq!(interpret(&mut interpreter, "'abc' == 'abc'"), JsValue::Boolean(true));
-        assert_eq!(interpret(&mut interpreter, "'abc' == 'qwe'"), JsValue::Boolean(false));
-        assert_eq!(interpret(&mut interpreter, "123 == 123"), JsValue::Boolean(true));
-        assert_eq!(interpret(&mut interpreter, "123 == 456"), JsValue::Boolean(false));
-        assert_eq!(interpret(&mut interpreter, "true == true"), JsValue::Boolean(true));
-        assert_eq!(interpret(&mut interpreter, "true == false"), JsValue::Boolean(false));
-        assert_eq!(interpret(&mut interpreter, "false == false"), JsValue::Boolean(true));
-        assert_eq!(eval_code("let a = {}; let b = {}; a == b;"), JsValue::Boolean(false));
-        assert_eq!(eval_code("let a = {}; let b = a; a == b;"), JsValue::Boolean(true));
+        assert_eq!(
+            interpret(&mut interpreter, "'abc' == 'abc'"),
+            JsValue::Boolean(true)
+        );
+        assert_eq!(
+            interpret(&mut interpreter, "'abc' == 'qwe'"),
+            JsValue::Boolean(false)
+        );
+        assert_eq!(
+            interpret(&mut interpreter, "123 == 123"),
+            JsValue::Boolean(true)
+        );
+        assert_eq!(
+            interpret(&mut interpreter, "123 == 456"),
+            JsValue::Boolean(false)
+        );
+        assert_eq!(
+            interpret(&mut interpreter, "true == true"),
+            JsValue::Boolean(true)
+        );
+        assert_eq!(
+            interpret(&mut interpreter, "true == false"),
+            JsValue::Boolean(false)
+        );
+        assert_eq!(
+            interpret(&mut interpreter, "false == false"),
+            JsValue::Boolean(true)
+        );
+        assert_eq!(
+            eval_code("let a = {}; let b = {}; a == b;"),
+            JsValue::Boolean(false)
+        );
+        assert_eq!(
+            eval_code("let a = {}; let b = a; a == b;"),
+            JsValue::Boolean(true)
+        );
     }
 
     #[test]
@@ -652,7 +720,10 @@ mod tests {
             let user = new User('Anton', 26);
             user.getUserInformation();
         ";
-        assert_eq!(eval_code(code), JsValue::String("Name is Anton, 26 years old".to_string()));
+        assert_eq!(
+            eval_code(code),
+            JsValue::String("Name is Anton, 26 years old".to_string())
+        );
     }
 
     #[test]
@@ -675,8 +746,16 @@ mod tests {
             user.getUserInformation();
         ";
         interpret(&mut interpreter, code);
-        let class = interpreter.environment.borrow().borrow().get_variable_value("User");
-        let class_instance = interpreter.environment.borrow().borrow().get_variable_value("user");
+        let class = interpreter
+            .environment
+            .borrow()
+            .borrow()
+            .get_variable_value("User");
+        let class_instance = interpreter
+            .environment
+            .borrow()
+            .borrow()
+            .get_variable_value("user");
 
         if let JsValue::Object(class_object) = &class {
             if let JsValue::Object(instance_object) = &class_instance {
@@ -726,7 +805,10 @@ mod tests {
             let user = new User('Anton', 26);
             user.getUserInformation();
         ";
-        assert_eq!(eval_code(code), JsValue::String("Name is Anton, 26 years old".to_string()));
+        assert_eq!(
+            eval_code(code),
+            JsValue::String("Name is Anton, 26 years old".to_string())
+        );
     }
 
     #[test]
@@ -747,7 +829,10 @@ mod tests {
           const c = 'World';
           `-- before ${a + 2} ${b} ${c} after--`
         ";
-        assert_eq!(eval_code(code), JsValue::String("-- before 7 Hello World after--".to_string()));
+        assert_eq!(
+            eval_code(code),
+            JsValue::String("-- before 7 Hello World after--".to_string())
+        );
     }
 
     #[test]

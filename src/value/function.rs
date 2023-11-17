@@ -12,7 +12,6 @@ use crate::value::object::{JsObject, ObjectKind};
 pub enum JsFunction {
     Ordinary(OrdinaryFunction),
     Native(NativeFunction),
-    NativeBytecode(NativeBytecodeFunction),
     Bytecode(CodeBlock),
 }
 
@@ -23,10 +22,6 @@ impl JsFunction {
 
     pub fn ordinary_function(arguments: Vec<JsFunctionArg>, body: Box<AstStatement>, environment: EnvironmentRef) -> Self {
         OrdinaryFunction::new(arguments, body, environment).into()
-    }
-
-    pub fn native_bytecode_function(function: fn(&VM, &[JsValue]) -> Result<JsValue, String>) -> Self {
-        NativeBytecodeFunction::new(function).into()
     }
 
     pub fn to_object(self) -> JsObject {
@@ -41,26 +36,6 @@ impl JsFunction {
 impl Into<JsValue> for JsFunction {
     fn into(self) -> JsValue {
         JsValue::Object(JsObject::new(ObjectKind::Function(self), []).to_ref())
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct NativeBytecodeFunction {
-    function: fn(&VM, &[JsValue]) -> Result<JsValue, String>,
-}
-
-impl NativeBytecodeFunction {
-    pub fn new(function: fn(&VM, &[JsValue]) -> Result<JsValue, String>) -> Self {
-        Self {
-            function
-        }
-    }
-}
-
-impl VmCallable for NativeBytecodeFunction {
-    fn call(&self, vm: &mut VM, arguments: &[JsValue]) {
-        let result = (self.function)(vm, arguments).unwrap();
-        vm.push(result);
     }
 }
 
@@ -92,12 +67,6 @@ impl OrdinaryFunction {
 impl Into<JsFunction> for OrdinaryFunction {
     fn into(self) -> JsFunction {
         JsFunction::Ordinary(self)
-    }
-}
-
-impl Into<JsFunction> for NativeBytecodeFunction {
-    fn into(self) -> JsFunction {
-        JsFunction::NativeBytecode(self)
     }
 }
 

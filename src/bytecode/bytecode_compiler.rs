@@ -13,8 +13,8 @@ pub struct GlobalVariable {
 }
 
 impl GlobalVariable {
-    pub fn new(name: String, value: JsValue) -> Self {
-        Self { name, value }
+    pub fn new(name: &str, value: JsValue) -> Self {
+        Self { name: name.to_owned(), value }
     }
 }
 
@@ -221,21 +221,29 @@ impl<'a> BytecodeCompiler<'a> {
 
 impl<'a> Visitor for BytecodeCompiler<'a> {
     fn visit_statement(&mut self, stmt: &AstStatement) {
-        match stmt {
-            AstStatement::ProgramStatement(stmt) => self.visit_program_statement(stmt),
-            AstStatement::VariableDeclaration(stmt) => self.visit_variable_declaration(stmt),
-            AstStatement::BlockStatement(stmt) => self.visit_block_statement(stmt),
-            AstStatement::WhileStatement(node) => self.visit_while_statement(node),
-            AstStatement::ForStatement(stmt) => self.visit_for_statement(stmt),
-            AstStatement::FunctionDeclaration(stmt) => self.visit_function_declaration(stmt),
-            AstStatement::ReturnStatement(node) => self.visit_return_statement(node),
-            AstStatement::ExpressionStatement(stmt) => self.visit_expression_statement(stmt),
-            AstStatement::IfStatement(stmt) => self.visit_if_statement(stmt),
-            AstStatement::BreakStatement(token) => self.visit_break_statement(token),
+        let is_computed_expression = stmt.is_simple();
+
+        if is_computed_expression {
+            let value = Interpreter::eval_statement(&stmt)
+                .expect("Error during evaluating a so-called simple expression during compilation");
+            self.push_literal(value);
+        } else {
+            match stmt {
+                AstStatement::ProgramStatement(stmt) => self.visit_program_statement(stmt),
+                AstStatement::VariableDeclaration(stmt) => self.visit_variable_declaration(stmt),
+                AstStatement::BlockStatement(stmt) => self.visit_block_statement(stmt),
+                AstStatement::WhileStatement(node) => self.visit_while_statement(node),
+                AstStatement::ForStatement(stmt) => self.visit_for_statement(stmt),
+                AstStatement::FunctionDeclaration(stmt) => self.visit_function_declaration(stmt),
+                AstStatement::ReturnStatement(node) => self.visit_return_statement(node),
+                AstStatement::ExpressionStatement(stmt) => self.visit_expression_statement(stmt),
+                AstStatement::IfStatement(stmt) => self.visit_if_statement(stmt),
+                AstStatement::BreakStatement(token) => self.visit_break_statement(token),
+            }
         }
     }
 
-    fn visit_break_statement(&mut self, _: &Token) {}
+    fn visit_break_statement(&mut self, _: &BreakStatementNode) {}
 
     fn visit_while_statement(&mut self, node: &WhileStatementNode) {
         let start_while_loop_offset = self.offset();
@@ -319,22 +327,63 @@ impl<'a> Visitor for BytecodeCompiler<'a> {
         self.visit_block(&stmt.statements);
     }
 
-    fn visit_if_statement(&mut self, stmt: &IfStatementNode) {
-        self.visit_expression(&stmt.condition);
-
-        self.emit(Opcode::JumpIfFalse, &[0]);
-        let else_branch_address = self.offset() - 1;
-
-        self.visit_statement(&stmt.then_branch);
-        if stmt.else_branch.is_some() {
-            self.emit(Opcode::Jump, &[0]);
+    fn visit_expression(&mut self, stmt: &AstExpression) {
+        if stmt.is_simple() {
+            let value = Interpreter::eval_expression(stmt.clone())
+                .expect("Error during evaluating a so-called simple expression during compilation");
+            self.push_literal(value);
+        } else {
+            match stmt {
+                AstExpression::StringLiteral(node) => self.visit_string_literal(node),
+                AstExpression::NumberLiteral(node) => self.visit_number_literal(node),
+                AstExpression::BooleanLiteral(node) => self.visit_boolean_literal(node),
+                AstExpression::NullLiteral(_) => self.visit_null_literal(),
+                AstExpression::UndefinedLiteral(_) => self.visit_undefined_literal(),
+                AstExpression::ThisExpression(node) => self.visit_this_expression(node),
+                AstExpression::Identifier(node) => self.visit_identifier_node(node),
+                AstExpression::BinaryExpression(node) => self.visit_binary_expression(node),
+                AstExpression::AssignmentExpression(node) => self.visit_assignment_expression(node),
+                AstExpression::FunctionExpression(node) => self.visit_function_expression(node),
+                AstExpression::CallExpression(node) => self.visit_call_expression(node),
+                AstExpression::ConditionalExpression(node) => self.visit_conditional_expression(node),
+                AstExpression::MemberExpression(node) => self.visit_member_expression(node),
+                AstExpression::NewExpression(node) => self.visit_new_expression(node),
+                AstExpression::ObjectExpression(node) => self.visit_object_expression(node),
+                AstExpression::ClassDeclaration(node) => self.visit_class_declaration(node),
+                AstExpression::ArrayExpression(node) => self.visit_array_expression(node),
+                AstExpression::TemplateStringLiteral(node) => self.visit_template_string_literal_expression(node),
+                AstExpression::UnaryExpression(node) => self.visit_unary_expression(node),
+            }
         }
-        let then_branch_end = self.offset() - 1;
-        self.patch_jump_address(else_branch_address, self.offset());
+    }
 
-        if let Some(else_branch) = &stmt.else_branch {
-            self.visit_statement(else_branch);
-            self.patch_jump_address(then_branch_end, self.offset());
+    fn visit_if_statement(&mut self, stmt: &IfStatementNode) {
+        if stmt.condition.is_simple() {
+            let value = Interpreter::eval_expression(*stmt.condition.clone())
+                .expect("Error during evaluating a condition during compilation");
+
+            if value.to_bool() {
+                self.visit_statement(&stmt.then_branch);
+            } else if stmt.else_branch.is_some() {
+                self.visit_statement(&stmt.else_branch.as_ref().unwrap());
+            }
+        } else {
+            self.visit_expression(&stmt.condition);
+
+            self.emit(Opcode::JumpIfFalse, &[0]);
+            let else_branch_address = self.offset() - 1;
+
+            self.visit_statement(&stmt.then_branch);
+            if stmt.else_branch.is_some() {
+                self.emit(Opcode::Jump, &[0]);
+            }
+            let then_branch_end = self.offset() - 1;
+            self.patch_jump_address(else_branch_address, self.offset());
+
+            if let Some(else_branch) = &stmt.else_branch {
+                self.visit_statement(else_branch);
+                self.patch_jump_address(then_branch_end, self.offset());
+            }
         }
     }
 

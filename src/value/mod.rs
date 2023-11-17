@@ -5,9 +5,10 @@ use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::fmt::{Debug, Display, Formatter};
 use std::ops;
-use crate::bytecode::bytecode_interpreter::VM;
+use crate::interpreter::environment::EnvironmentRef;
 use crate::keywords::{NULL_KEYWORD, UNDEFINED_KEYWORD};
-use crate::value::function::JsFunction;
+use crate::nodes::AstStatement;
+use crate::value::function::{JsFunction, JsFunctionArg};
 use crate::value::object::{JsObject, JsObjectRef, ObjectKind};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -28,12 +29,12 @@ impl JsValue {
         }
     }
 
-    pub fn native_function(function: fn(&[JsValue]) -> Result<JsValue, String>) -> Self {
-        JsFunction::native_function(function).into()
+    pub fn function(arguments: Vec<JsFunctionArg>, body: Box<AstStatement>, environment: EnvironmentRef) -> Self {
+        JsFunction::ordinary_function(arguments, body, environment).into()
     }
 
-    pub fn native_bytecode_function(function: fn(&VM, &[JsValue]) -> Result<JsValue, String>) -> Self {
-        JsFunction::native_bytecode_function(function).into()
+    pub fn native_function(function: fn(&[JsValue]) -> Result<JsValue, String>) -> Self {
+        JsFunction::native_function(function).into()
     }
 
     pub fn as_string(&self) -> &str {
@@ -116,7 +117,7 @@ impl JsValue {
                         match function {
                             JsFunction::Ordinary(_) => "[function]".to_string(),
                             JsFunction::Bytecode(function) => format!("[function {}]", function.name),
-                            JsFunction::Native(_) | JsFunction::NativeBytecode(_) => format!("[native function]"),
+                            JsFunction::Native(_) => format!("[native function]"),
                         }
                     },
                     ObjectKind::Array => {
@@ -174,7 +175,7 @@ impl JsValue {
                         match function {
                             JsFunction::Ordinary(_) => format!("[function]"),
                             JsFunction::Bytecode(function) => format!("[function {}]", function.name),
-                            JsFunction::Native(_) | JsFunction::NativeBytecode(_) => format!("[native function]"),
+                            JsFunction::Native(_) => format!("[native function]"),
                         }
                     },
                     ObjectKind::Array => {
@@ -307,7 +308,7 @@ impl Display for JsValue {
                         match function {
                             JsFunction::Ordinary(_) => write!(f, "[function]"),
                             JsFunction::Bytecode(function) => write!(f, "[function {}]", function.name),
-                            JsFunction::Native(_) | JsFunction::NativeBytecode(_) => write!(f, "[native function]"),
+                            JsFunction::Native(_) => write!(f, "[native function]"),
                         }
                     },
                     ObjectKind::Array => {

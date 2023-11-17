@@ -3,22 +3,22 @@ use std::rc::Rc;
 use std::collections::HashMap;
 use crate::diagnostic::{Diagnostic, DiagnosticBagRef, DiagnosticKind};
 use crate::nodes::*;
-use crate::scanner::{TextSpan, Token};
+use crate::scanner::{TextSpan};
 use crate::Source;
 use crate::symbol_checker::diagnostics::{ConstantAssigningDiagnostic, ManualImplOfAssignOperationDiagnostic, MultipleAssignmentDiagnostic, UnusedVariableDiagnostic, VariableNotDefinedDiagnostic, WrongBreakContextDiagnostic, WrongThisContextDiagnostic};
 use crate::visitor::Visitor;
 
 /// Should traverse ast and find unused variables & assigning to constant variables
-pub struct SymbolChecker<'a> {
-    source: &'a Source,
+pub struct SymbolChecker {
+    source: Rc<Source>,
     environment: RefCell<LightEnvironmentRef>,
-    diagnostic_bag: DiagnosticBagRef<'a>,
+    diagnostic_bag: DiagnosticBagRef,
     is_inside_this_context: bool,
     break_context_stack: Vec<bool>,
 }
 
-impl<'a> SymbolChecker<'a> {
-    pub fn new(source: &'a Source, diagnostic_bag: DiagnosticBagRef<'a>, globals: Vec<String>) -> Self {
+impl SymbolChecker {
+    pub fn new(source: Rc<Source>, diagnostic_bag: DiagnosticBagRef, globals: Vec<String>) -> Self {
         let global_environment = LightEnvironment::with_symbols(globals);
 
         Self {
@@ -58,7 +58,7 @@ impl<'a> SymbolChecker<'a> {
             self.diagnostic_bag.borrow_mut().report_warning(
                 Diagnostic::new(DiagnosticKind::UnusedVariable(
                     UnusedVariableDiagnostic { id_span: symbol.span.clone(), variable_name: variable_name.to_string() }
-                ), self.source)
+                ), self.source.clone())
             );
         }
     }
@@ -67,19 +67,19 @@ impl<'a> SymbolChecker<'a> {
         self.diagnostic_bag.borrow_mut().report_error(
             Diagnostic::new(DiagnosticKind::VariableNotDefined(
                 VariableNotDefinedDiagnostic { variable_name: variable_name.to_string(), id_span: span }
-            ), self.source)
+            ), self.source.clone())
         );
     }
 
     fn define_variable(&mut self, symbol_name: &str, is_const: bool, span: TextSpan) {
-        let error = self.environment.borrow().borrow_mut()
+        let is_already_defined = self.environment.borrow().borrow_mut()
             .define_variable(symbol_name, Symbol { is_const, span: span.clone() });
 
-        if error.is_some() {
+        if is_already_defined {
             self.diagnostic_bag.borrow_mut().report_error(
                 Diagnostic::new(DiagnosticKind::MultipleAssignment(
                     MultipleAssignmentDiagnostic { symbol_name: symbol_name.to_string(), id_span: span }
-                ), self.source)
+                ), self.source.clone())
             );
         }
     }
@@ -165,12 +165,13 @@ impl LightEnvironment {
         }
     }
 
-    fn define_variable(&mut self, variable_name: &str, symbol: Symbol) -> Option<()> {
+    /// returns true if variables was already defined
+    fn define_variable(&mut self, variable_name: &str, symbol: Symbol) -> bool {
         if self.symbols.contains_key(variable_name) {
-            return Some(());
+            return true;
         }
         self.symbols.insert(variable_name.to_string(), symbol);
-        return None;
+        false
     }
 
     /// returns true if variable is exists
@@ -229,14 +230,15 @@ impl LightEnvironment {
     }
 }
 
-impl<'a> Visitor for SymbolChecker<'a> {
+impl Visitor for SymbolChecker {
+    // we need to visit initializer first cause it can access a variable with the same name
     fn visit_variable_declaration(&mut self, stmt: &VariableDeclarationNode) {
-        let variable_name = &stmt.id.id;
-        self.define_variable(&variable_name, matches!(stmt.kind, VariableDeclarationKind::Const), stmt.id.get_span());
-
         if let Some(value) = &stmt.value {
             self.visit_expression(value);
         }
+
+        let variable_name = &stmt.id.id;
+        self.define_variable(&variable_name, matches!(stmt.kind, VariableDeclarationKind::Const), stmt.id.get_span());
     }
 
     fn visit_block_statement(&mut self, stmt: &BlockStatementNode) {
@@ -265,7 +267,7 @@ impl<'a> Visitor for SymbolChecker<'a> {
                 self.diagnostic_bag.borrow_mut().report_warning(
                     Diagnostic::new(DiagnosticKind::ManualImplOfAssignOperation(
                         ManualImplOfAssignOperationDiagnostic { span: stmt.get_span() }
-                    ), self.source)
+                    ), self.source.clone())
                 );
             }
         }
@@ -293,7 +295,7 @@ impl<'a> Visitor for SymbolChecker<'a> {
                                         declaration_span,
                                         id_span: stmt.left.get_span(),
                                     }
-                                ), self.source)
+                                ), self.source.clone())
                             );
                         }
                         AssignVariableResult::VariableNotDefined => {
@@ -307,6 +309,10 @@ impl<'a> Visitor for SymbolChecker<'a> {
             }
             _ => todo!(),
         }
+    }
+
+    fn visit_member_expression(&mut self, stmt: &MemberExpressionNode) {
+        self.visit_expression(&stmt.object);
     }
 
     fn visit_identifier_node(&mut self, stmt: &IdentifierNode) {
@@ -349,7 +355,7 @@ impl<'a> Visitor for SymbolChecker<'a> {
             self.diagnostic_bag.borrow_mut().report_error(
                 Diagnostic::new(DiagnosticKind::WrongThisContext(
                     WrongThisContextDiagnostic { span: node.token.span.clone() }
-                ), self.source)
+                ), self.source.clone())
             );
         }
     }
@@ -379,16 +385,89 @@ impl<'a> Visitor for SymbolChecker<'a> {
         self.pop_break_context();
     }
 
-    fn visit_break_statement(&mut self, token: &Token) {
+    fn visit_break_statement(&mut self, node: &BreakStatementNode) {
         let break_context_state = self.break_context_stack.last();
         let is_inside_break_context = break_context_state.is_some() && *break_context_state.unwrap();
 
         if !is_inside_break_context {
             self.diagnostic_bag.borrow_mut().report_error(
                 Diagnostic::new(DiagnosticKind::WrongBreakContext(
-                    WrongBreakContextDiagnostic { span: token.span.clone() }
-                ), self.source)
+                    WrongBreakContextDiagnostic { span: node.0.span.clone() }
+                ), self.source.clone())
             );
         }
+    }
+}
+
+mod tests {
+    use std::cell::RefCell;
+    use std::rc::Rc;
+    use crate::diagnostic::{Diagnostic, DiagnosticBag, DiagnosticBagRef, DiagnosticKind};
+    use crate::globals::get_globals;
+    use crate::parser::Parser;
+    use crate::source::Source;
+    use crate::symbol_checker::symbol_checker::SymbolChecker;
+
+    fn parse_and_collect_diagnostics(code: &str) -> DiagnosticBagRef {
+        let source = Rc::new(Source::inline_source(code.to_string()));
+        let diagnostic_bag_ref = Rc::new(RefCell::new(DiagnosticBag::new()));
+        let globals = get_globals();
+        let global_names: Vec<String> = globals.iter().map(|x| x.name.clone()).collect();
+        let mut symbol_checker = SymbolChecker::new(source.clone(), Rc::clone(&diagnostic_bag_ref), global_names);
+        let ast = Parser::parse_code_to(source).expect("Parsing error");
+        symbol_checker.check_symbols(&ast);
+        symbol_checker.diagnostic_bag
+    }
+
+    #[test]
+    fn report_unused_variables() {
+        let code = "let a = 5;";
+        let diagnostic_bag = parse_and_collect_diagnostics(&code);
+        assert_eq!(diagnostic_bag.borrow().warnings.len(), 1);
+        assert_eq!(diagnostic_bag.borrow().errors.len(), 0);
+        assert!(matches!(
+            diagnostic_bag.borrow().warnings[0],
+            Diagnostic { kind: DiagnosticKind::UnusedVariable(ref n), .. } if n.variable_name == "a"
+        ));
+    }
+
+    #[test]
+    fn not_report_unused_variables() {
+        let code = "let a = 5; { a; }";
+        let diagnostic_bag = parse_and_collect_diagnostics(&code);
+        assert_eq!(diagnostic_bag.borrow().warnings.len(), 0);
+        assert_eq!(diagnostic_bag.borrow().errors.len(), 0);
+    }
+
+    #[test]
+    fn report_unused_function() {
+        let code = "function add() {}";
+        let diagnostic_bag = parse_and_collect_diagnostics(&code);
+        assert_eq!(diagnostic_bag.borrow().warnings.len(), 1);
+        assert_eq!(diagnostic_bag.borrow().errors.len(), 0);
+        assert!(matches!(
+            diagnostic_bag.borrow().warnings[0],
+            Diagnostic { kind: DiagnosticKind::UnusedVariable(ref n), .. } if n.variable_name == "add"
+        ));
+    }
+
+    #[test]
+    fn report_reassigning_constant() {
+        let code = "const a = 5; a = 10;";
+        let diagnostic_bag = parse_and_collect_diagnostics(&code);
+        assert_eq!(diagnostic_bag.borrow().warnings.len(), 0);
+        assert_eq!(diagnostic_bag.borrow().errors.len(), 1);
+        assert!(matches!(
+            diagnostic_bag.borrow().errors[0],
+            Diagnostic { kind: DiagnosticKind::ConstantAssigning(ref n), .. } if n.variable_name == "a"
+        ));
+    }
+
+    #[test]
+    fn not_report_globals() {
+        let code = "print(Math.cos(Math.sin(Math.PI)));";
+        let diagnostic_bag = parse_and_collect_diagnostics(&code);
+        assert_eq!(diagnostic_bag.borrow().warnings.len(), 0);
+        assert_eq!(diagnostic_bag.borrow().errors.len(), 0);
     }
 }

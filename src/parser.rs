@@ -1,3 +1,4 @@
+use std::rc::Rc;
 use ariadne::{Color, Label, Report, ReportKind};
 use crate::scanner::{Scanner, Token, TokenKind};
 use crate::nodes::*;
@@ -9,25 +10,25 @@ pub struct Parser {
     prev_token: Option<Token>,
     current_token: Option<Token>,
     scanner: Scanner,
-    source: Source,
+    source: Rc<Source>,
 }
 
 pub type AstExpressionResult = Result<AstExpression, String>;
 pub type AstStatementResult = Result<AstStatement, String>;
 
 impl Parser {
-    pub fn parse_code_to(code: Source) -> AstStatementResult {
+    pub fn parse_code_to(code: Rc<Source>) -> AstStatementResult {
         let mut parser = Parser::default();
         return parser.parse(code);
     }
 
-    pub fn set_new_source(&mut self, source: Source) {
+    pub fn set_new_source(&mut self, source: Rc<Source>) {
         self.source = source;
         self.scanner = Scanner::new(self.source.code().to_string());
         self.current_token = self.scanner.next_token();
     }
 
-    pub fn parse(&mut self, source: Source) -> AstStatementResult {
+    pub fn parse(&mut self, source: Rc<Source>) -> AstStatementResult {
         self.set_new_source(source);
 
         let mut statements: Vec<AstStatement> = vec![];
@@ -68,7 +69,7 @@ impl Parser {
         let token = self.get_copy_current_token();
         self.eat(&TokenKind::BreakKeyword);
         self.eat_if_present(&TokenKind::Semicolon);
-        return Ok(AstStatement::BreakStatement(token));
+        return Ok(AstStatement::BreakStatement(BreakStatementNode(token)));
     }
 
     fn parse_class_expression(&mut self) -> AstExpressionResult {
@@ -789,7 +790,7 @@ impl Parser {
                         let mut string_with_whitespaces = " ".repeat(start_template_pos + prev_pos);
                         string_with_whitespaces.push_str(&str[prev_pos..pos - 1]);
                         let source = Source::inline_source(string_with_whitespaces);
-                        parser.set_new_source(source);
+                        parser.set_new_source(Rc::new(source));
                         let expression = parser.parse_expression()
                             .expect(format!("Error during template parsing, expression: '{str}'").as_str());
                         template_elements.push(TemplateElement::Expression(expression));

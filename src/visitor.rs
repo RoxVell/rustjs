@@ -80,7 +80,7 @@ pub trait Visitor {
         }
     }
 
-    fn visit_break_statement(&mut self, _: &Token) {}
+    fn visit_break_statement(&mut self, _: &BreakStatementNode) {}
 
     fn visit_while_statement(&mut self, node: &WhileStatementNode) {
         self.visit_expression(&node.condition);
@@ -124,7 +124,6 @@ pub trait Visitor {
     }
 
     fn visit_function_signature(&mut self, stmt: &FunctionSignature) {
-        // self.visit_identifier_node(&stmt.name);
         stmt.arguments.iter().for_each(|x| self.visit_function_argument(x));
         self.visit_statement(&stmt.body);
     }

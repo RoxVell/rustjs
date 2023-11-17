@@ -1,16 +1,17 @@
 use std::rc::Rc;
 use std::cell::RefCell;
+use enum_dispatch::enum_dispatch;
 use crate::Source;
 use crate::symbol_checker::diagnostics::{ConstantAssigningDiagnostic, ManualImplOfAssignOperationDiagnostic, MultipleAssignmentDiagnostic, UnusedVariableDiagnostic, VariableNotDefinedDiagnostic, WrongBreakContextDiagnostic, WrongThisContextDiagnostic};
 
-pub struct DiagnosticBag<'a> {
-    pub warnings: Vec<Diagnostic<'a>>,
-    pub errors: Vec<Diagnostic<'a>>,
+pub struct DiagnosticBag {
+    pub warnings: Vec<Diagnostic>,
+    pub errors: Vec<Diagnostic>,
 }
 
-pub type DiagnosticBagRef<'a> = Rc<RefCell<DiagnosticBag<'a>>>;
+pub type DiagnosticBagRef = Rc<RefCell<DiagnosticBag>>;
 
-impl<'a> DiagnosticBag<'a> {
+impl DiagnosticBag {
     pub fn new() -> Self {
         Self {
             warnings: vec![],
@@ -18,16 +19,17 @@ impl<'a> DiagnosticBag<'a> {
         }
     }
 
-    pub fn report_error(&mut self, diagnostic: Diagnostic<'a>) {
+    pub fn report_error(&mut self, diagnostic: Diagnostic) {
         self.errors.push(diagnostic);
     }
 
-    pub fn report_warning(&mut self, diagnostic: Diagnostic<'a>) {
+    pub fn report_warning(&mut self, diagnostic: Diagnostic) {
         self.warnings.push(diagnostic);
     }
 }
 
 #[derive(Debug)]
+#[enum_dispatch(PrintDiagnostic)]
 pub enum DiagnosticKind {
     UnusedVariable(UnusedVariableDiagnostic),
     ConstantAssigning(ConstantAssigningDiagnostic),
@@ -39,13 +41,13 @@ pub enum DiagnosticKind {
 }
 
 #[derive(Debug)]
-pub struct Diagnostic<'a> {
-    kind: DiagnosticKind,
-    source: &'a Source,
+pub struct Diagnostic {
+    pub(super) kind: DiagnosticKind,
+    source: Rc<Source>,
 }
 
-impl<'a> Diagnostic<'a> {
-    pub(crate) fn new(kind: DiagnosticKind, source: &'a Source) -> Self {
+impl Diagnostic {
+    pub(crate) fn new(kind: DiagnosticKind, source: Rc<Source>) -> Self {
         Self {
             kind,
             source,
@@ -53,18 +55,11 @@ impl<'a> Diagnostic<'a> {
     }
 
     pub fn print_diagnostic(&self) {
-        match &self.kind {
-            DiagnosticKind::UnusedVariable(diagnostic) => diagnostic.print_diagnostic(self.source),
-            DiagnosticKind::ConstantAssigning(diagnostic) => diagnostic.print_diagnostic(self.source),
-            DiagnosticKind::VariableNotDefined(diagnostic) => diagnostic.print_diagnostic(self.source),
-            DiagnosticKind::MultipleAssignment(diagnostic) => diagnostic.print_diagnostic(self.source),
-            DiagnosticKind::WrongThisContext(diagnostic) => diagnostic.print_diagnostic(self.source),
-            DiagnosticKind::WrongBreakContext(diagnostic) => diagnostic.print_diagnostic(self.source),
-            DiagnosticKind::ManualImplOfAssignOperation(diagnostic) => diagnostic.print_diagnostic(self.source),
-        }
+        self.kind.print_diagnostic(self.source.as_ref())
     }
 }
 
+#[enum_dispatch]
 pub trait PrintDiagnostic {
     fn print_diagnostic(&self, source: &Source);
 }

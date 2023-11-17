@@ -2,7 +2,7 @@ use std::cmp::Ordering;
 use crate::bytecode::bytecode_compiler::{CodeBlock, GlobalVariable};
 use crate::bytecode::opcodes::Opcode;
 use crate::nodes::JsValue;
-use crate::value::function::{JsFunction, NativeCallable, VmCallable};
+use crate::value::function::{JsFunction, NativeCallable};
 use crate::value::object::{ObjectKind};
 
 #[derive(Debug)]
@@ -76,6 +76,7 @@ impl<'a> VM<'a> {
             // println!("{opcode:?}");
             match opcode {
                 Opcode::Call => {
+                    self.dump_stack();
                     let params_count = self.read_byte();
                     let value = self.peek(params_count as usize);
 
@@ -87,14 +88,9 @@ impl<'a> VM<'a> {
                                     for _ in 0..params_count {
                                         params.insert(0, self.pop());
                                     }
-                                    function.call_fn(&params).unwrap();
-                                },
-                                JsFunction::NativeBytecode(function) => {
-                                    let mut params: Vec<JsValue> = Vec::with_capacity(params_count as usize);
-                                    for _ in 0..params_count {
-                                        params.insert(0, self.pop());
-                                    }
-                                    function.call(self, &params);
+
+                                    self.pop();
+                                    self.push(function.call_fn(&params).unwrap());
                                 },
                                 JsFunction::Bytecode(function) => {
                                     let new_call_frame = CallFrame::new(self.stack.len() - 1 - params_count as usize, function.clone());
@@ -132,6 +128,7 @@ impl<'a> VM<'a> {
                     let object = self.pop();
                     let value = object.as_object().borrow()
                         .get_property_value(key.as_string());
+                    // println!("get prop by key: {key} value: {value:?}");
                     self.push(value);
                 },
                 Opcode::SetProp => {
