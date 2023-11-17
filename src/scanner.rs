@@ -6,6 +6,7 @@ use crate::keywords::{BREAK_KEYWORD, CATCH_KEYWORD, CLASS_KEYWORD, CONST_KEYWORD
 pub enum TokenKind {
     // Literal
     String(String),
+    TemplateString(String),
     Number(f64),
     Boolean(String),
     Null,
@@ -100,6 +101,7 @@ pub enum TokenKind {
 impl TokenKind {
     pub fn to_keyword(&self) -> String {
         match self {
+            TokenKind::TemplateString(value) => format!("<template string> '{}' (string)", value),
             TokenKind::String(value) => format!("{} (string)", value),
             TokenKind::Number(value) => format!("{} (number)", value),
             TokenKind::Boolean(value) => format!("{} (boolean)", value),
@@ -182,16 +184,31 @@ impl Display for TokenKind {
     }
 }
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Default, Clone, Debug, PartialEq)]
 pub struct TextSpan {
     pub start: Span,
     pub end: Span,
 }
 
-#[derive(Clone, PartialEq)]
+impl TextSpan {
+    pub fn new(start: Span, end: Span) -> Self {
+        Self {
+            start,
+            end,
+        }
+    }
+}
+
+#[derive(Clone)]
 pub struct Token {
     pub token: TokenKind,
     pub span: TextSpan,
+}
+
+impl PartialEq for Token {
+    fn eq(&self, other: &Self) -> bool {
+        self.token == other.token
+    }
 }
 
 impl Debug for Token {
@@ -200,12 +217,13 @@ impl Debug for Token {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq)]
+#[derive(Default, Debug, Copy, Clone, PartialEq)]
 pub struct Span {
     pub line: usize,
     pub row: usize,
 }
 
+#[derive(Default)]
 pub struct Scanner {
     current_pos: usize,
     current_line: usize,
@@ -223,6 +241,10 @@ impl Scanner {
             current_line: 0,
             source_code,
         }
+    }
+
+    pub fn get_current_pos(&self) -> usize {
+        self.current_pos
     }
 
     fn consume(&self, token: TokenKind) -> Token {
@@ -276,6 +298,11 @@ impl Scanner {
             '?' => Some(TokenKind::Question),
             _ => None,
         };
+
+        if let Some(_) = found_token {
+            self.current_pos += 1;
+            return found_token.map(|x| self.consume(x));
+        }
 
         if current_char == '=' {
             self.current_pos += 1;
@@ -466,16 +493,11 @@ impl Scanner {
             return Some(self.consume(TokenKind::BitwiseAnd));
         }
 
-        if let Some(_) = found_token {
-            self.current_pos += 1;
-            return found_token.map(|x| self.consume(x));
-        }
-
-        if current_char.is_digit(10) {
+        if current_char.is_ascii_digit() {
             while let Some(char) = chars.next() {
                 if char == '.' {
                     cursor += 1;
-                } else if char.is_digit(10) {
+                } else if char.is_ascii_digit() {
                     cursor += 1;
                 } else {
                     break;
@@ -496,6 +518,12 @@ impl Scanner {
         if current_char == '"' || current_char == '\'' {
             return self
                 .parse_string_literal(current_char)
+                .map(|x| self.consume(x));
+        }
+
+        if current_char == '`' {
+            return self
+                .parse_template_string_literal(current_char)
                 .map(|x| self.consume(x));
         }
 
@@ -546,17 +574,17 @@ impl Scanner {
 
         let identifier = &self.source_code[self.current_pos..=cursor];
 
-        if keywords.contains_key(identifier) {
+        return if keywords.contains_key(identifier) {
             let token_kind = keywords.get(identifier).unwrap();
             self.current_pos += identifier.len();
-            return Some(self.consume(token_kind.clone()));
+            Some(self.consume(token_kind.clone()))
         } else {
             self.current_pos += identifier.len();
-            return Some(self.consume(TokenKind::Identifier(identifier.to_string())));
+            Some(self.consume(TokenKind::Identifier(identifier.to_string())))
         }
     }
 
-    fn parse_string_literal(&mut self, quote_char: char) -> Option<TokenKind> {
+    fn parse_until_char(&mut self, until_char: char) -> &str {
         let mut cursor = self.current_pos;
         let mut chars = self.source_code[cursor..].chars();
 
@@ -565,13 +593,21 @@ impl Scanner {
         while let Some(char) = chars.next() {
             cursor += 1;
 
-            if char == quote_char {
+            if char == until_char {
                 break;
             }
         }
 
-        let token = TokenKind::String(self.source_code[self.current_pos + 1..cursor].to_string());
+        let result = &self.source_code[self.current_pos + 1..cursor];
         self.current_pos = cursor + 1;
-        return Some(token);
+        result
+    }
+
+    fn parse_template_string_literal(&mut self, quote_char: char) -> Option<TokenKind> {
+        Some(TokenKind::TemplateString(self.parse_until_char(quote_char).to_string()))
+    }
+
+    fn parse_string_literal(&mut self, quote_char: char) -> Option<TokenKind> {
+        Some(TokenKind::String(self.parse_until_char(quote_char).to_string()))
     }
 }

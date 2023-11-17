@@ -1,10 +1,11 @@
 use std::collections::HashMap;
 use std::{cell::RefCell, rc::Rc};
 use std::fmt::{Formatter};
+use crate::bytecode::bytecode_compiler::GlobalVariable;
 use crate::keywords::THIS_KEYWORD;
 use crate::value::JsValue;
 
-#[derive(Clone, PartialEq)]
+#[derive(Default, Clone, PartialEq)]
 pub struct Environment {
     parent: Option<EnvironmentRef>,
     variables: HashMap<String, (bool, JsValue)>,
@@ -18,15 +19,6 @@ impl std::fmt::Debug for Environment {
 
 pub type EnvironmentRef = Rc<RefCell<Environment>>;
 
-impl Default for Environment {
-    fn default() -> Self {
-        Self {
-            parent: None,
-            variables: HashMap::new(),
-        }
-    }
-}
-
 impl Environment {
     pub fn new(parent: EnvironmentRef) -> Self {
         Self {
@@ -35,7 +27,20 @@ impl Environment {
         }
     }
 
-    pub fn new_with_variables<T: Into<HashMap<String, (bool, JsValue)>>>(variables: T) -> Self {
+    pub fn with_globals(globals: Vec<GlobalVariable>) -> Self {
+        let mut variables = HashMap::new();
+
+        globals.into_iter().for_each(|x| {
+            variables.insert(x.name, (true, x.value));
+        });
+
+        Self {
+            parent: None,
+            variables
+        }
+    }
+
+    pub fn with_variables<T: Into<HashMap<String, (bool, JsValue)>>>(variables: T) -> Self {
         Self {
             parent: None,
             variables: variables.into(),
@@ -98,12 +103,13 @@ impl Environment {
 
     pub fn get_variable_value(&self, variable_name: &str) -> JsValue {
         if self.variables.contains_key(variable_name) {
-            return self.variables.get(variable_name).map_or(JsValue::Undefined, |(_, x)| x.clone());
+            self.variables.get(variable_name)
+                .map_or(JsValue::Undefined, |(_, x)| x.clone())
         } else {
-            return self
+            self
                 .parent
                 .as_ref()
-                .map_or(JsValue::Undefined, |parent_env| parent_env.borrow().get_variable_value(variable_name));
+                .map_or(JsValue::Undefined, |parent_env| parent_env.borrow().get_variable_value(variable_name))
         }
     }
 }

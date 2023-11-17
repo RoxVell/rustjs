@@ -1,12 +1,12 @@
-use crate::interpreter::ast_interpreter::{Execute, Interpreter};
-use crate::nodes::AstExpression;
+use crate::interpreter::ast_interpreter::{Interpreter};
+use crate::nodes::{AstExpression, Execute};
 use crate::value::JsValue;
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct MemberExpressionNode {
     pub computed: bool,
     pub object: Box<AstExpression>,
-    pub property: Box<AstExpression>, // TODO: maybe type
+    pub property: Box<AstExpression>,
 }
 
 impl Execute for MemberExpressionNode {
@@ -20,6 +20,5 @@ impl Execute for MemberExpressionNode {
             },
             _ => Err("Is not an object".to_string())
         }
-
     }
 }

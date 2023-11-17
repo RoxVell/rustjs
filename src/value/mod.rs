@@ -1,12 +1,14 @@
 pub mod object;
 pub mod function;
 
+use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::fmt::{Debug, Display, Formatter};
 use std::ops;
+use crate::interpreter::environment::EnvironmentRef;
 use crate::keywords::{NULL_KEYWORD, UNDEFINED_KEYWORD};
-use crate::nodes::Interpreter;
-use crate::value::function::JsFunction;
+use crate::nodes::AstStatement;
+use crate::value::function::{JsFunction, JsFunctionArg};
 use crate::value::object::{JsObject, JsObjectRef, ObjectKind};
 
 #[derive(Debug, Clone, PartialEq)]
@@ -27,8 +29,28 @@ impl JsValue {
         }
     }
 
-    pub fn native_function(function: fn(&Interpreter, &Vec<JsValue>) -> Result<JsValue, String>) -> Self {
+    pub fn function(arguments: Vec<JsFunctionArg>, body: Box<AstStatement>, environment: EnvironmentRef) -> Self {
+        JsFunction::ordinary_function(arguments, body, environment).into()
+    }
+
+    pub fn native_function(function: fn(&[JsValue]) -> Result<JsValue, String>) -> Self {
         JsFunction::native_function(function).into()
+    }
+
+    pub fn as_string(&self) -> &str {
+        if let JsValue::String(string) = self {
+            return string;
+        }
+
+        panic!("{}", format!("not a string, actual type: {}", self.get_type_as_str()))
+    }
+
+    pub fn as_object(&self) -> &JsObjectRef {
+        if let JsValue::Object(object) = self {
+            return object;
+        }
+
+        panic!("{}", format!("not an object, actual type: {}", self.get_type_as_str()))
     }
 
     pub fn object<T: Into<HashMap<String, JsValue>>>(properties: T) -> Self {
@@ -79,6 +101,95 @@ impl JsValue {
             )),
         }
     }
+
+    /// alternative to .toString()
+    pub fn to_js_like_string(&self) -> String {
+        match self {
+            JsValue::Undefined => format!("{UNDEFINED_KEYWORD}"),
+            JsValue::Null => format!("{NULL_KEYWORD}"),
+            JsValue::String(str) => str.to_string(),
+            JsValue::Number(number) => number.to_string(),
+            JsValue::Boolean(value) => format!("{}", if *value { "true" } else { "false" }),
+            JsValue::Object(object) => {
+                match &object.borrow().kind {
+                    ObjectKind::Ordinary => "[object]".to_string(),
+                    ObjectKind::Function(function) => {
+                        match function {
+                            JsFunction::Ordinary(_) => "[function]".to_string(),
+                            JsFunction::Bytecode(function) => format!("[function {}]", function.name),
+                            JsFunction::Native(_) => format!("[native function]"),
+                        }
+                    },
+                    ObjectKind::Array => {
+                        let result: Vec<String> = object.borrow().properties
+                            .values()
+                            .map(|x| format!("{x}"))
+                            .collect();
+                        let result = result.join(", ");
+                        format!("[{result}]")
+                    }
+                }
+            },
+        }
+    }
+
+    pub fn unary_plus(self) -> JsValue {
+        match self {
+            JsValue::Number(value) => JsValue::Number(value.abs()),
+            _ => panic!("Cannot use plus operator with value type '{}'", self.get_type_as_str())
+        }
+    }
+
+    pub fn unary_minus(self) -> JsValue {
+        match self {
+            JsValue::Number(value) => JsValue::Number(-value),
+            _ => panic!("Cannot use minus operator with value type '{}'", self.get_type_as_str())
+        }
+    }
+
+    pub fn unary_logical_not(self) -> JsValue {
+        match self {
+            JsValue::Boolean(value) => JsValue::Boolean(!value),
+            _ => panic!("Cannot use logical not operator (!) with value type '{}'", self.get_type_as_str())
+        }
+    }
+
+    pub fn display_with_no_colors(&self) -> String {
+        match self {
+            JsValue::Undefined => format!("{UNDEFINED_KEYWORD}"),
+            JsValue::Null => format!("{NULL_KEYWORD}"),
+            JsValue::String(str) => format!("\"{}\"", str),
+            JsValue::Number(number) => format!("{}", number),
+            JsValue::Boolean(value) => format!("{}", if *value { "true" } else { "false" }),
+            JsValue::Object(object) => {
+                match &object.borrow().kind {
+                    ObjectKind::Ordinary => {
+                        let result: Vec<String> = object.borrow().properties
+                            .iter()
+                            .map(|(key, value)| format!("{key}: {value}"))
+                            .collect();
+                        let result = result.join(", ");
+                        format!("{{ {result} }}")
+                    },
+                    ObjectKind::Function(function) => {
+                        match function {
+                            JsFunction::Ordinary(_) => format!("[function]"),
+                            JsFunction::Bytecode(function) => format!("[function {}]", function.name),
+                            JsFunction::Native(_) => format!("[native function]"),
+                        }
+                    },
+                    ObjectKind::Array => {
+                        let result: Vec<String> = object.borrow().properties
+                            .values()
+                            .map(|x| format!("{x}"))
+                            .collect();
+                        let result = result.join(", ");
+                        format!("[{result}]")
+                    }
+                }
+            },
+        }
+    }
 }
 
 impl From<f64> for JsValue {
@@ -96,6 +207,17 @@ impl From<bool> for JsValue {
 impl From<String> for JsValue {
     fn from(value: String) -> Self {
         JsValue::String(value)
+    }
+}
+
+impl PartialOrd for JsValue {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        match (self, other) {
+            (JsValue::Number(left_number), JsValue::Number(right_number)) => {
+                left_number.partial_cmp(right_number)
+            },
+            _ => None
+        }
     }
 }
 
@@ -167,7 +289,7 @@ impl ops::Div<&JsValue> for &JsValue {
 impl Display for JsValue {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            JsValue::Undefined => write!(f, "\x1b[37m{UNDEFINED_KEYWORD}\x1b[0m"),
+            JsValue::Undefined => write!(f, "\x1b[37m{}\x1b[0m", self.display_with_no_colors()),
             JsValue::Null => write!(f, "{NULL_KEYWORD}"),
             JsValue::String(str) => write!(f, "\x1b[93m\"{}\"\x1b[0m", str),
             JsValue::Number(number) => write!(f, "\x1b[36m{}\x1b[0m", number),
@@ -185,6 +307,7 @@ impl Display for JsValue {
                     ObjectKind::Function(function) => {
                         match function {
                             JsFunction::Ordinary(_) => write!(f, "[function]"),
+                            JsFunction::Bytecode(function) => write!(f, "[function {}]", function.name),
                             JsFunction::Native(_) => write!(f, "[native function]"),
                         }
                     },

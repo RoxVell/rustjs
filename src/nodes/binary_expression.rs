@@ -1,6 +1,6 @@
 use std::rc::Rc;
-use crate::interpreter::ast_interpreter::{Execute, Interpreter};
-use crate::nodes::AstExpression;
+use crate::interpreter::ast_interpreter::{Interpreter};
+use crate::nodes::{AstExpression, Execute};
 use crate::scanner::TokenKind;
 use crate::value::JsValue;
 

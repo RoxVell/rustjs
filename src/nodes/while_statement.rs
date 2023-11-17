@@ -1,5 +1,5 @@
-use crate::interpreter::ast_interpreter::{Execute, Interpreter};
-use crate::nodes::{AstExpression, AstStatement};
+use crate::interpreter::ast_interpreter::{Interpreter};
+use crate::nodes::{AstExpression, AstStatement, Execute};
 use crate::value::JsValue;
 
 #[derive(Debug, Clone, PartialEq)]

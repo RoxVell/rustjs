@@ -1,6 +1,6 @@
-use crate::interpreter::ast_interpreter::{Execute, Interpreter};
+use crate::interpreter::ast_interpreter::{Interpreter};
 use crate::node::GetSpan;
-use crate::nodes::AstExpression;
+use crate::nodes::{AstExpression, Execute};
 use crate::scanner::{Span, TextSpan, TokenKind};
 use crate::value::JsValue;
 

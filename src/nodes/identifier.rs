@@ -1,7 +1,7 @@
 use std::fmt::{Debug, Formatter};
-use crate::interpreter::ast_interpreter::{Execute, Interpreter};
+use crate::interpreter::ast_interpreter::{Interpreter};
 use crate::node::GetSpan;
-use crate::nodes::{AstExpression, AstStatement};
+use crate::nodes::{AstExpression, AstStatement, Execute};
 use crate::scanner::{TextSpan, Token};
 use crate::value::JsValue;
 
@@ -33,11 +33,11 @@ impl GetSpan for IdentifierNode {
     }
 }
 
-impl Into<AstExpression> for IdentifierNode {
-    fn into(self) -> AstExpression {
-        AstExpression::Identifier(self)
-    }
-}
+// impl Into<AstExpression> for IdentifierNode {
+//     fn into(self) -> AstExpression {
+//         AstExpression::Identifier(self)
+//     }
+// }
 
 impl From<IdentifierNode> for AstStatement {
     fn from(value: IdentifierNode) -> Self {

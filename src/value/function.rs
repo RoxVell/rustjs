@@ -1,9 +1,10 @@
 use std::cell::RefCell;
 use std::fmt::{Debug, Formatter};
 use std::rc::Rc;
-use crate::interpreter::environment::*;
-use crate::interpreter::ast_interpreter::{Execute, Interpreter};
-use crate::nodes::{AstStatement, BlockStatementNode};
+use crate::bytecode::bytecode_compiler::CodeBlock;
+use crate::bytecode::bytecode_interpreter::VM;
+use crate::interpreter::environment::{Environment, EnvironmentRef};
+use crate::nodes::{AstStatement, BlockStatementNode, Execute, Interpreter};
 use crate::value::JsValue;
 use crate::value::object::{JsObject, ObjectKind};
 
@@ -11,10 +12,11 @@ use crate::value::object::{JsObject, ObjectKind};
 pub enum JsFunction {
     Ordinary(OrdinaryFunction),
     Native(NativeFunction),
+    Bytecode(CodeBlock),
 }
 
 impl JsFunction {
-    pub fn native_function(function: fn(&Interpreter, &Vec<JsValue>) -> Result<JsValue, String>) -> Self {
+    pub fn native_function(function: fn(&[JsValue]) -> Result<JsValue, String>) -> Self {
         Self::Native(NativeFunction { function })
     }
 
@@ -80,11 +82,9 @@ impl Debug for JsFunctionArg {
     }
 }
 
-impl Callable for OrdinaryFunction {
-    fn call(&self, interpreter: &Interpreter, _: &Vec<JsValue>) -> Result<JsValue, String> {
+impl AstCallable for OrdinaryFunction {
+    fn call(&self, interpreter: &Interpreter) -> Result<JsValue, String> {
         self.body.as_ref().execute(interpreter)
-        // let result = self.body.as_ref().execute(interpreter);
-        // return result.map(|x| x.unwrap_or(JsValue::Undefined));
     }
 }
 
@@ -94,28 +94,43 @@ impl Debug for NativeFunction {
     }
 }
 
-impl Callable for NativeFunction {
-    fn call(&self, interpreter: &Interpreter, arguments: &Vec<JsValue>) -> Result<JsValue, String> {
-        (self.function)(interpreter, arguments)
+// impl AstCallable for NativeFunction {
+//     fn call(&self, interpreter: &Interpreter, arguments: &[JsValue]) -> Result<JsValue, String> {
+//         (self.function)(interpreter, arguments)
+//     }
+// }
+
+// impl AstCallable for JsFunction {
+//     fn call(&self, interpreter: &Interpreter, arguments: &[JsValue]) -> Result<JsValue, String> {
+//         match self {
+//             JsFunction::Ordinary(function) => function.call(interpreter, arguments),
+//             JsFunction::Native(function) => function.call(interpreter, arguments),
+//             _ => unreachable!(),
+//         }
+//     }
+// }
+
+pub trait AstCallable: Sized {
+    fn call(&self, interpreter: &Interpreter) -> Result<JsValue, String>;
+}
+
+pub trait NativeCallable: Sized {
+    fn call_fn(&self, arguments: &[JsValue]) -> Result<JsValue, String>;
+}
+
+impl NativeCallable for NativeFunction {
+    fn call_fn(&self, arguments: &[JsValue]) -> Result<JsValue, String> {
+        (self.function)(arguments)
     }
 }
 
-impl Callable for JsFunction {
-    fn call(&self, interpreter: &Interpreter, arguments: &Vec<JsValue>) -> Result<JsValue, String> {
-        match self {
-            JsFunction::Ordinary(function) => function.call(interpreter, arguments),
-            JsFunction::Native(function) => function.call(interpreter, arguments)
-        }
-    }
-}
-
-pub trait Callable: Sized {
-    fn call(&self, interpreter: &Interpreter, arguments: &Vec<JsValue>) -> Result<JsValue, String>;
+pub trait VmCallable: Sized {
+    fn call(&self, vm: &mut VM, arguments: &[JsValue]);
 }
 
 #[derive(Clone, PartialEq)]
 pub struct NativeFunction {
-    pub function: fn(&Interpreter, &Vec<JsValue>) -> Result<JsValue, String>,
+    pub function: fn(&[JsValue]) -> Result<JsValue, String>,
 }
 
 // impl Into<JsValue> for OrdinaryFunction {

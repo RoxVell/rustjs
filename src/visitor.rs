@@ -1,6 +1,69 @@
 use crate::nodes::*;
 use crate::scanner::Token;
 
+// pub trait ExpressionVisitor {
+//     type Type;
+//
+//     fn visit_string_literal(&mut self, _: &StringLiteralNode) -> Self::Type;
+//     fn visit_template_string_literal_expression(&mut self, _: &TemplateStringLiteralNode) -> Self::Type;
+//     fn visit_number_literal(&mut self, _: &NumberLiteralNode) -> Self::Type;
+//     fn visit_boolean_literal(&mut self, _: &BooleanLiteralNode) -> Self::Type;
+//     fn visit_undefined_literal(&mut self) -> Self::Type;
+//     fn visit_null_literal(&mut self) -> Self::Type;
+//     fn visit_this_expression(&mut self, _: &ThisExpressionNode) -> Self::Type;
+//     fn visit_object_expression(&mut self, node: &ObjectExpressionNode) {
+//         node.properties.iter().for_each(|x| self.visit_object_property(x));
+//     }
+//     fn visit_identifier_node(&mut self, _: &IdentifierNode) -> Self::Type;
+//     fn visit_binary_expression(&mut self, stmt: &BinaryExpressionNode) -> Self::Type {
+//         self.visit_expression(stmt.left.as_ref());
+//         self.visit_expression(stmt.right.as_ref());
+//     }
+//     fn visit_assignment_expression(&mut self, stmt: &AssignmentExpressionNode) -> Self::Type {
+//         self.visit_expression(&stmt.left);
+//         self.visit_expression(&stmt.right);
+//     }
+//     fn visit_function_expression(&mut self, node: &FunctionExpressionNode) -> Self::Type {
+//         node.arguments.iter().for_each(|x| self.visit_function_argument(x));
+//         self.visit_statement(&node.body);
+//     }
+//     fn visit_call_expression(&mut self, stmt: &CallExpressionNode) -> Self::Type {
+//         self.visit_expression(&stmt.callee);
+//         stmt.params.iter().for_each(|x| self.visit_expression(x));
+//     }
+//     fn visit_conditional_expression(&mut self, node: &ConditionalExpressionNode) -> Self::Type  {
+//         self.visit_expression(&node.test);
+//         self.visit_expression(&node.consequent);
+//         self.visit_expression(&node.alternative);
+//     }
+//
+//     fn visit_array_expression(&mut self, node: &ArrayExpressionNode) -> Self::Type  {
+//         node.items.iter().for_each(|x| self.visit_expression(x));
+//     }
+//
+//     fn visit_member_expression(&mut self, stmt: &MemberExpressionNode) -> Self::Type  {
+//         self.visit_expression(&stmt.object);
+//         self.visit_expression(&stmt.property);
+//     }
+//
+//     fn visit_new_expression(&mut self, stmt: &NewExpressionNode) -> Self::Type {
+//         self.visit_expression(&stmt.callee);
+//         stmt.arguments.iter().for_each(|x| self.visit_expression(x));
+//     }
+//
+//     fn visit_class_declaration(&mut self, stmt: &ClassDeclarationNode) -> Self::Type {
+//         self.visit_identifier_node(stmt.name.as_ref());
+//         if let Some(parent) = &stmt.parent {
+//             self.visit_identifier_node(parent);
+//         }
+//         stmt.methods.iter().for_each(|x| self.visit_class_method(x));
+//     }
+//
+//     fn visit_unary_expression(&mut self, node: &UnaryExpressionNode) -> Self::Type {
+//         self.visit_expression(&node.expression);
+//     }
+// }
+
 pub trait Visitor {
     fn visit_statement(&mut self, stmt: &AstStatement) {
         match stmt {
@@ -17,7 +80,7 @@ pub trait Visitor {
         }
     }
 
-    fn visit_break_statement(&mut self, _: &Token) {}
+    fn visit_break_statement(&mut self, _: &BreakStatementNode) {}
 
     fn visit_while_statement(&mut self, node: &WhileStatementNode) {
         self.visit_expression(&node.condition);
@@ -61,7 +124,6 @@ pub trait Visitor {
     }
 
     fn visit_function_signature(&mut self, stmt: &FunctionSignature) {
-        self.visit_identifier_node(&stmt.name);
         stmt.arguments.iter().for_each(|x| self.visit_function_argument(x));
         self.visit_statement(&stmt.body);
     }
@@ -114,8 +176,16 @@ pub trait Visitor {
             AstExpression::ObjectExpression(node) => self.visit_object_expression(node),
             AstExpression::ClassDeclaration(node) => self.visit_class_declaration(node),
             AstExpression::ArrayExpression(node) => self.visit_array_expression(node),
+            AstExpression::TemplateStringLiteral(node) => self.visit_template_string_literal_expression(node),
+            AstExpression::UnaryExpression(node) => self.visit_unary_expression(node),
         }
     }
+
+    fn visit_unary_expression(&mut self, node: &UnaryExpressionNode) {
+        self.visit_expression(&node.expression);
+    }
+
+    fn visit_template_string_literal_expression(&mut self, _: &TemplateStringLiteralNode) {}
 
     fn visit_conditional_expression(&mut self, node: &ConditionalExpressionNode) {
         self.visit_expression(&node.test);

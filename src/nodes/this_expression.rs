@@ -1,5 +1,5 @@
-use crate::interpreter::ast_interpreter::{Execute, Interpreter};
-use crate::nodes::{JsValue, Token};
+use crate::interpreter::ast_interpreter::{Interpreter};
+use crate::nodes::{Execute, JsValue, Token};
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ThisExpressionNode {
